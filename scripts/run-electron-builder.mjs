@@ -31,6 +31,10 @@ function collectFiles(directory) {
   });
 }
 
+export function buildElectronBuilderArgs(args, repoRoot) {
+  return ["--config", join(repoRoot, "electron-builder.config.mjs"), ...args, "--publish", "never"];
+}
+
 export function runElectronBuilder(args, repoRoot = resolve(import.meta.dirname, "..")) {
   const executable = join(repoRoot, "apps", "desktop", "node_modules", ".bin", "electron-builder");
   if (!existsSync(executable)) {
@@ -39,7 +43,7 @@ export function runElectronBuilder(args, repoRoot = resolve(import.meta.dirname,
   const packagingAssets = collectFiles(join(repoRoot, "apps", "desktop", "build"));
   const result = withPublicReadAccess(packagingAssets, () =>
     withPublicArtifactUmask(() =>
-      spawnSync(executable, ["--config", join(repoRoot, "electron-builder.config.mjs"), ...args], {
+      spawnSync(executable, buildElectronBuilderArgs(args, repoRoot), {
         cwd: repoRoot,
         env: { ...process.env },
         stdio: "inherit",

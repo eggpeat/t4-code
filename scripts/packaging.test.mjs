@@ -8,6 +8,7 @@ import { runPreflight, validatePreloadArtifact, validateWebIndex } from "./packa
 import { inspectPackage, locateAppRoot } from "./inspect-package.mjs";
 import { LINUX_ICON_SIZES, verifyDesktopIcon } from "./desktop-icon-checks.mjs";
 import {
+  buildElectronBuilderArgs,
   PUBLIC_ARTIFACT_UMASK,
   withPublicArtifactUmask,
   withPublicReadAccess,
@@ -23,6 +24,10 @@ test("builder config keeps release contract", () => {
   assert.equal(config.linux.category, "Development");
   assert.equal(config.mac.category, "public.app-category.developer-tools");
   assert.equal(config.artifactName, "T4-Code-${version}-${os}-${arch}.${ext}");
+});
+
+test("builder never publishes implicitly from a release tag", () => {
+  assert.deepEqual(buildElectronBuilderArgs(["--linux", "--x64"], repoRoot).slice(-2), ["--publish", "never"]);
 });
 
 test("builder uses a public artifact umask without changing its caller", () => {
