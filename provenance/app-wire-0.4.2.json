@@ -1,0 +1,16 @@
+{
+  "package": "@oh-my-pi/app-wire",
+  "version": "0.4.2",
+  "appProtocol": "omp-app/1",
+  "sourceRepository": "https://github.com/can1357/oh-my-pi",
+  "sourceCommit": "71259ba8a191c0667fd0fed0f83295c61cf2cc0b",
+  "sourceTreeHash": "d88b37a74dfb08e70e3ee10c7786661e8f7339b4",
+  "targetRepository": "@t4-code/desktop",
+  "targetBaseCommit": "44f3e6c00d1364c6135182b917567df4be94f46c",
+  "targetIntegrationCommit": "bfb0d4d3f5fcd6274d2b76f2ed4ffcc3f4f55458",
+  "tarball": "vendor/app-wire/oh-my-pi-app-wire-0.4.2.tgz",
+  "tarballSha256": "66d460dc2276c7f7d6b50a1bc1f285b799fb6467270a3433fb9507453e4f0270",
+  "goldenCorpusSha256": "d183c8d99721920a3aee66f29c50183c232315b1c2c9d07dcc8f079d5e92ab6c",
+  "classification": "vendored-package",
+  "license": "MIT"
+}

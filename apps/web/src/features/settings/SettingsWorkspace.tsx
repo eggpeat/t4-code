@@ -1,0 +1,532 @@
+// The settings surface: a searchable section rail beside progressive
+// sections of schema-driven rows, a staged-edit save bar, and banners for
+// host conflicts and pending restarts. Standalone by design — it mounts
+// anywhere with a store api and owns no routing.
+import { Badge, Button, cn, IconButton, Spinner } from "@t4-code/ui";
+import { ArrowLeft, Cable, Download, RotateCcw, Search } from "lucide-react";
+import { useEffect, useMemo, useRef } from "react";
+
+import { RAIL_OVERLAY_QUERY, useMediaQuery } from "../../hooks/useMediaQuery.ts";
+import { AccentRow } from "./AccentRow.tsx";
+import { FIELD_CLASS } from "./controls.tsx";
+import { buildDiagnosticsExport } from "./diagnostics.ts";
+import { railFocusTarget, type RailKey } from "./keyboard.ts";
+import type { AgentCatalog, ModelChoice } from "./live-catalog.ts";
+import { CYCLE_SETTING_ID, ModelRolesBlock, ROLES_SETTING_ID } from "./ModelRolesBlock.tsx";
+import type { EditableScope } from "./schema.ts";
+import { EDITABLE_SCOPES } from "./schema.ts";
+import type { SettingsStoreApi } from "./settings-store.ts";
+import { useSettings } from "./settings-store.ts";
+import { SettingRowView } from "./SettingRow.tsx";
+import { DISABLED_SETTING_ID, OVERRIDES_SETTING_ID, TaskAgentsBlock } from "./TaskAgentsBlock.tsx";
+import { filterSections, type SettingsSection } from "./view-model.ts";
+
+/** The wire "session" scope is a host-process runtime override, not a
+ * per-session setting. The tab says what it really is: this run of OMP. */
+export const SCOPE_TAB_LABEL: Record<EditableScope, string> = {
+  global: "This machine",
+  project: "This project",
+  session: "This run",
+};
+
+function ScopeTabs({
+  api,
+  scopes,
+}: {
+  readonly api: SettingsStoreApi;
+  readonly scopes: readonly EditableScope[];
+}) {
+  const editScope = useSettings(api, (state) => state.editScope);
+  if (scopes.length < 2) return null;
+  return (
+    <div
+      aria-label="Where changes apply"
+      className="flex shrink-0 items-center gap-0.5 rounded-lg border border-border p-0.5"
+      role="group"
+    >
+      {scopes.map((scope) => (
+        <button
+          aria-pressed={scope === editScope}
+          className={cn(
+            "h-6.5 cursor-pointer whitespace-nowrap rounded-md px-2 font-medium text-xs outline-none transition-colors duration-(--motion-duration-fast) focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+            scope === editScope
+              ? "bg-secondary text-foreground"
+              : "text-muted-foreground hover:bg-accent hover:text-foreground",
+          )}
+          key={scope}
+          onClick={() => api.getState().setEditScope(scope)}
+          type="button"
+        >
+          {SCOPE_TAB_LABEL[scope]}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function SectionRail({
+  api,
+  sections,
+  matchedIds,
+}: {
+  readonly api: SettingsStoreApi;
+  readonly sections: readonly SettingsSection[];
+  readonly matchedIds: ReadonlySet<string> | null;
+}) {
+  const activeSectionId = useSettings(api, (state) => state.activeSectionId);
+  const drafts = useSettings(api, (state) => state.drafts);
+  const itemRefs = useRef(new Map<string, HTMLButtonElement>());
+
+  const dirtyBySection = useMemo(() => {
+    const counts = new Map<string, number>();
+    const { rowsById } = api.getState().viewModel;
+    for (const id of Object.keys(drafts)) {
+      const sectionId = rowsById.get(id)?.sectionId;
+      if (sectionId !== undefined) counts.set(sectionId, (counts.get(sectionId) ?? 0) + 1);
+    }
+    return counts;
+  }, [api, drafts]);
+
+  return (
+    <nav aria-label="Settings sections" className="flex w-52 shrink-0 flex-col overflow-y-auto border-border border-e py-2">
+      <ul className="flex flex-col gap-px px-2">
+        {sections.map((section) => {
+          const active = section.id === activeSectionId;
+          const dimmed = matchedIds !== null && !matchedIds.has(section.id);
+          const dirtyCount = dirtyBySection.get(section.id) ?? 0;
+          return (
+            <li key={section.id}>
+              <button
+                aria-current={active ? "true" : undefined}
+                className={cn(
+                  "relative flex h-8 w-full cursor-pointer items-center gap-2 rounded-md px-2.5 text-start text-sm outline-none transition-colors duration-(--motion-duration-fast) focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+                  active
+                    ? "bg-secondary font-medium text-foreground"
+                    : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                  dimmed && "opacity-64",
+                )}
+                onClick={() => api.getState().setActiveSection(section.id)}
+                onKeyDown={(event) => {
+                  if (
+                    event.key !== "ArrowDown" &&
+                    event.key !== "ArrowUp" &&
+                    event.key !== "Home" &&
+                    event.key !== "End"
+                  ) {
+                    return;
+                  }
+                  const target = railFocusTarget(
+                    sections.map((entry) => entry.id),
+                    section.id,
+                    event.key as RailKey,
+                  );
+                  if (target === null) return;
+                  event.preventDefault();
+                  api.getState().setActiveSection(target);
+                  itemRefs.current.get(target)?.focus();
+                }}
+                ref={(node) => {
+                  if (node === null) itemRefs.current.delete(section.id);
+                  else itemRefs.current.set(section.id, node);
+                }}
+                tabIndex={active ? 0 : -1}
+                type="button"
+              >
+                {active && (
+                  <span aria-hidden="true" className="absolute inset-y-1.5 start-0 w-0.5 rounded-full bg-primary" />
+                )}
+                <span className="min-w-0 flex-1 truncate">{section.label}</span>
+                {dirtyCount > 0 && (
+                  <Badge aria-label={`${dirtyCount} unsaved`} size="sm" variant="secondary">
+                    {dirtyCount}
+                  </Badge>
+                )}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    </nav>
+  );
+}
+
+function SectionRows({
+  api,
+  section,
+  hiddenIds,
+}: {
+  readonly api: SettingsStoreApi;
+  readonly section: SettingsSection;
+  readonly hiddenIds: ReadonlySet<string>;
+}) {
+  const editScope = useSettings(api, (state) => state.editScope);
+  const drafts = useSettings(api, (state) => state.drafts);
+  const draftErrors = useSettings(api, (state) => state.draftErrors);
+  const state = api.getState();
+  const rows = section.rows.filter((row) => !hiddenIds.has(row.id));
+  if (rows.length === 0) return null;
+  return (
+    <div className="divide-y divide-border rounded-lg border border-border bg-card">
+      {rows.map((row) =>
+        row.control.kind === "nested" ? (
+          <div key={row.id}>
+            <div className="flex flex-col gap-0.5 px-4 pt-3 pb-1">
+              <span className="font-medium text-foreground text-sm">{row.label}</span>
+              <p className="max-w-[70ch] text-muted-foreground text-xs leading-relaxed">{row.help}</p>
+            </div>
+            <div className="divide-y divide-border/60">
+              {row.control.children.map((child) => (
+                <SettingRowView
+                  draft={drafts[child.id]}
+                  draftError={draftErrors[child.id]}
+                  editScope={editScope}
+                  key={child.id}
+                  nested
+                  onClear={state.stageClear}
+                  onDiscard={state.discardDraft}
+                  onStage={state.stageValue}
+                  row={child}
+                />
+              ))}
+            </div>
+          </div>
+        ) : (
+          <SettingRowView
+            draft={drafts[row.id]}
+            draftError={draftErrors[row.id]}
+            editScope={editScope}
+            key={row.id}
+            onClear={state.stageClear}
+            onDiscard={state.discardDraft}
+            onStage={state.stageValue}
+            row={row}
+          />
+        ),
+      )}
+    </div>
+  );
+}
+
+function DiagnosticsActions({ api }: { readonly api: SettingsStoreApi }) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-lg border border-border bg-card px-4 py-3">
+      <p className="max-w-[70ch] text-muted-foreground text-xs leading-relaxed">
+        Download the current configuration as JSON for a bug report. Anything marked sensitive is
+        left out, and secret values are never included.
+      </p>
+      <Button
+        onClick={() => {
+          const payload = buildDiagnosticsExport(api.getState().viewModel, new Date().toISOString());
+          const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+          const url = URL.createObjectURL(blob);
+          const anchor = document.createElement("a");
+          anchor.href = url;
+          anchor.download = "t4-code-settings-diagnostics.json";
+          anchor.click();
+          URL.revokeObjectURL(url);
+        }}
+        size="sm"
+        variant="outline"
+      >
+        <Download />
+        Export diagnostics
+      </Button>
+    </div>
+  );
+}
+
+/** Restart affordance the shell wires up for the local host only. */
+export interface RestartAction {
+  readonly label: string;
+  readonly busy: boolean;
+  /** Honest one-liner: last inspected status or the failure, never a guess. */
+  readonly notice: string | null;
+  readonly onRestart: () => void;
+}
+
+/** Live model/agent catalog choices the specialized blocks offer. */
+export interface SettingsCatalogChoices {
+  readonly models: readonly ModelChoice[];
+  readonly agents: AgentCatalog;
+}
+
+const NO_CHOICES: SettingsCatalogChoices = { models: [], agents: { agents: [], unavailableReason: null } };
+
+const NO_HIDDEN: ReadonlySet<string> = new Set();
+
+export function SettingsWorkspace({
+  api,
+  onBack,
+  onOpenHosts,
+  scopes = EDITABLE_SCOPES,
+  restartAction,
+  catalogChoices = NO_CHOICES,
+}: {
+  readonly api: SettingsStoreApi;
+  /** Renders a back control in the header; the host shell owns navigation. */
+  readonly onBack?: () => void;
+  /** Renders a "Hosts" control in the header; the host shell owns routing. */
+  readonly onOpenHosts?: () => void;
+  /** Layers this host accepts writes for; defaults to every editable layer. */
+  readonly scopes?: readonly EditableScope[];
+  /** Offered in the restart banner when the runtime is locally managed. */
+  readonly restartAction?: RestartAction;
+  /** Models and agents the host advertises, for the roles/agents editors. */
+  readonly catalogChoices?: SettingsCatalogChoices;
+}) {
+  const viewModel = useSettings(api, (state) => state.viewModel);
+  const query = useSettings(api, (state) => state.query);
+  const activeSectionId = useSettings(api, (state) => state.activeSectionId);
+  const drafts = useSettings(api, (state) => state.drafts);
+  const draftErrors = useSettings(api, (state) => state.draftErrors);
+  const saving = useSettings(api, (state) => state.saving);
+  const announcement = useSettings(api, (state) => state.announcement);
+  const incoming = useSettings(api, (state) => state.incoming);
+  const restartIds = useSettings(api, (state) => state.restartIds);
+  const railOverlaid = useMediaQuery(RAIL_OVERLAY_QUERY);
+  const editScope = useSettings(api, (state) => state.editScope);
+
+  const contentRef = useRef<HTMLDivElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+
+  const searching = query.trim().length > 0;
+  const matchedSections = useMemo(
+    () => (searching ? filterSections(viewModel.sections, query) : null),
+    [searching, viewModel, query],
+  );
+  const matchedIds = useMemo(
+    () => (matchedSections === null ? null : new Set(matchedSections.map((section) => section.id))),
+    [matchedSections],
+  );
+  const activeSection = viewModel.sections.find((section) => section.id === activeSectionId);
+  const shownSections: readonly SettingsSection[] =
+    matchedSections ?? (activeSection === undefined ? [] : [activeSection]);
+
+  const dirtyCount = Object.keys(drafts).length;
+  const errorCount = Object.keys(draftErrors).length;
+
+  // The specialized blocks own these rows wherever the host filed them; the
+  // generic list hides them so the same value never renders twice.
+  const rolesHome =
+    viewModel.rowsById.get(ROLES_SETTING_ID)?.sectionId ??
+    viewModel.rowsById.get(CYCLE_SETTING_ID)?.sectionId ??
+    null;
+  const tasksHome =
+    viewModel.rowsById.get(OVERRIDES_SETTING_ID)?.sectionId ??
+    viewModel.rowsById.get(DISABLED_SETTING_ID)?.sectionId ??
+    null;
+  const hiddenIds = useMemo(() => {
+    if (rolesHome === null && tasksHome === null) return NO_HIDDEN;
+    const ids = new Set<string>();
+    if (rolesHome !== null) {
+      ids.add(ROLES_SETTING_ID);
+      ids.add(CYCLE_SETTING_ID);
+    }
+    if (tasksHome !== null) {
+      ids.add(OVERRIDES_SETTING_ID);
+      ids.add(DISABLED_SETTING_ID);
+    }
+    return ids;
+  }, [rolesHome, tasksHome]);
+
+  // Section changes land the reader at the top of the new section.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: scroll reset keyed on the section
+  useEffect(() => {
+    contentRef.current?.scrollTo({ top: 0 });
+  }, [activeSectionId]);
+
+  async function handleSave() {
+    await api.getState().save();
+    // The save bar unmounts when the last draft applies; don't strand focus
+    // on the removed button.
+    if (document.activeElement === document.body) headingRef.current?.focus();
+  }
+
+  return (
+    <div className="flex h-full min-h-0 min-w-0 flex-col bg-background text-foreground">
+      <header className="flex min-h-12 shrink-0 flex-wrap items-center gap-x-3 gap-y-1.5 border-border border-b px-4 py-2">
+        {onBack !== undefined && (
+          <IconButton aria-label="Back to sessions" onClick={onBack} size="icon-sm">
+            <ArrowLeft />
+          </IconButton>
+        )}
+        <h1 className="font-heading font-semibold text-base" ref={headingRef} tabIndex={-1}>
+          Settings
+        </h1>
+        <Badge variant="outline">{viewModel.hostLabel}</Badge>
+        <p aria-live="polite" className="min-w-0 flex-1 truncate text-end text-muted-foreground text-xs" role="status">
+          {announcement}
+        </p>
+        <div className="relative">
+          <Search aria-hidden="true" className="pointer-events-none absolute start-2 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <input
+            aria-label="Search settings"
+            className={cn(FIELD_CLASS, "h-7 w-56 ps-7")}
+            onChange={(event) => api.getState().setQuery(event.target.value)}
+            placeholder="Search settings"
+            type="search"
+            value={query}
+          />
+        </div>
+        {onOpenHosts !== undefined && (
+          <Button onClick={onOpenHosts} size="sm" variant="outline">
+            <Cable />
+            Hosts
+          </Button>
+        )}
+        <ScopeTabs api={api} scopes={scopes} />
+      </header>
+      {editScope === "session" && scopes.includes("session") && (
+        <p className="shrink-0 border-border border-b bg-secondary/40 px-4 py-1.5 text-muted-foreground text-xs" role="note">
+          Changes here apply to everything on {viewModel.hostLabel} until OMP restarts. They are
+          not saved to disk.
+        </p>
+      )}
+
+      <div className="flex min-h-0 min-w-0 flex-1">
+        {!railOverlaid && (
+          <SectionRail api={api} matchedIds={matchedIds} sections={viewModel.sections} />
+        )}
+
+        <div className="flex min-w-0 flex-1 flex-col">
+          {incoming !== null && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-border border-b bg-warning/8 px-4 py-2 dark:bg-warning/16">
+              <p className="min-w-0 flex-1 text-sm text-warning-foreground">
+                Settings changed on {viewModel.hostLabel} while you were editing.
+              </p>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <Button onClick={() => api.getState().loadIncoming()} size="xs" variant="outline">
+                  Load latest values
+                </Button>
+                <Button onClick={() => void api.getState().saveOverIncoming()} size="xs" variant="outline">
+                  Save mine anyway
+                </Button>
+              </div>
+            </div>
+          )}
+          {restartIds.length > 0 && (
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-border border-b bg-info/8 px-4 py-2 dark:bg-info/16">
+              <p className="min-w-0 flex-1 text-info-foreground text-sm">
+                {restartIds.length === 1
+                  ? "1 saved change takes effect after OMP restarts."
+                  : `${restartIds.length} saved changes take effect after OMP restarts.`}
+              </p>
+              {restartAction !== undefined && restartAction.notice !== null && (
+                <span className="shrink-0 text-muted-foreground text-xs" role="status">
+                  {restartAction.notice}
+                </span>
+              )}
+              {restartAction !== undefined && (
+                <Button
+                  disabled={restartAction.busy}
+                  onClick={restartAction.onRestart}
+                  size="xs"
+                  variant="outline"
+                >
+                  {restartAction.busy ? <Spinner /> : <RotateCcw />}
+                  {restartAction.label}
+                </Button>
+              )}
+              <Button onClick={() => api.getState().dismissRestart()} size="xs" variant="ghost">
+                Dismiss
+              </Button>
+            </div>
+          )}
+
+          <div className="min-h-0 flex-1 overflow-y-auto" ref={contentRef}>
+            <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-4">
+              {railOverlaid && (
+                <label className="flex flex-col gap-1">
+                  <span className="font-medium text-muted-foreground text-xs">Section</span>
+                  <select
+                    className={cn(FIELD_CLASS, "w-full")}
+                    onChange={(event) => api.getState().setActiveSection(event.target.value)}
+                    value={activeSectionId}
+                  >
+                    {viewModel.sections.map((section) => (
+                      <option key={section.id} value={section.id}>
+                        {section.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+
+              {searching && shownSections.length === 0 && (
+                <p className="py-8 text-center text-muted-foreground text-sm">
+                  Nothing matches “{query.trim()}”. Try a setting name or a word from its
+                  description.
+                </p>
+              )}
+
+              {shownSections.map((section) => (
+                <section aria-labelledby={`section-${section.id}`} key={section.id}>
+                  <div className="mb-2 flex flex-col gap-0.5">
+                    <h2
+                      className="font-heading font-semibold text-foreground text-sm"
+                      id={`section-${section.id}`}
+                      tabIndex={-1}
+                    >
+                      {section.label}
+                    </h2>
+                    <p className="max-w-[70ch] text-muted-foreground text-xs">{section.summary}</p>
+                  </div>
+                  <SectionRows api={api} hiddenIds={hiddenIds} section={section} />
+                  {section.id === rolesHome && (
+                    <ModelRolesBlock api={api} hostLabel={viewModel.hostLabel} models={catalogChoices.models} />
+                  )}
+                  {section.id === tasksHome && (
+                    <TaskAgentsBlock
+                      agents={catalogChoices.agents}
+                      api={api}
+                      hostLabel={viewModel.hostLabel}
+                      models={catalogChoices.models}
+                    />
+                  )}
+                  {section.id === "appearance" && (
+                    <div className="mt-3 rounded-lg border border-border bg-card">
+                      <AccentRow />
+                    </div>
+                  )}
+                  {section.id === "diagnostics" && (
+                    <div className="mt-3">
+                      <DiagnosticsActions api={api} />
+                    </div>
+                  )}
+                </section>
+              ))}
+            </div>
+          </div>
+
+          {(dirtyCount > 0 || saving) && (
+            <footer className="flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1.5 border-border border-t bg-background px-4 py-2">
+              <p className="text-sm">
+                {dirtyCount === 1 ? "1 unsaved change" : `${dirtyCount} unsaved changes`}
+                {errorCount > 0 && (
+                  <span className="text-destructive-foreground">
+                    {" "}
+                    · {errorCount === 1 ? "1 field needs attention" : `${errorCount} fields need attention`}
+                  </span>
+                )}
+              </p>
+              <div className="ms-auto flex shrink-0 items-center gap-1.5">
+                <Button
+                  disabled={saving}
+                  onClick={() => api.getState().discardAll()}
+                  size="sm"
+                  variant="outline"
+                >
+                  Discard all
+                </Button>
+                <Button disabled={saving || errorCount > 0} onClick={() => void handleSave()} size="sm">
+                  {saving && <Spinner />}
+                  Save changes
+                </Button>
+              </div>
+            </footer>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

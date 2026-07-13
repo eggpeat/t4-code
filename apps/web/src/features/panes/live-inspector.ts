@@ -1,0 +1,478 @@
+// Live inspector wiring: one inspector store per active desktop session,
+// fed exclusively by the runtime's session projection and answering pane
+// actions with typed commands through the runtime controller. Nothing here
+// reads fixtures, scrapes output, or fabricates state — what the frames do
+// not say, the panes do not show.
+import type {
+  DesktopRuntimeController,
+  DesktopRuntimeSnapshot,
+  SessionProjection,
+} from "@t4-code/client";
+import {
+  hostId as brandHostId,
+  requiredCapability,
+  revision as brandRevision,
+  sessionId as brandSessionId,
+  type Revision,
+} from "@t4-code/protocol";
+import type { CommandIntent, CommandResult } from "@t4-code/protocol/desktop-ipc";
+
+import { resolveLiveSession } from "../../platform/live-workspace.ts";
+import {
+  createInspectorStore,
+  installInspectorStoreFactory,
+  resolveDir,
+  resolvePreview,
+  resolveReviewOutcome,
+  type InspectorController,
+  type InspectorStoreApi,
+} from "./inspector-store.ts";
+import {
+  agentNodeFromFrame,
+  collectActivity,
+  fileListingsFromFrames,
+  isSafeRelativePath,
+  previewFromFileFrame,
+  reviewProjectionFromFrames,
+  sameAgentNode,
+  sameListing,
+  sameReviewFiles,
+} from "./live-projection.ts";
+import type {
+  AgentNode,
+  FileTreeNode,
+  InspectorActionAvailability,
+  PaneActionAvailability,
+  ReviewFile,
+} from "./model.ts";
+
+/**
+ * The slice of DesktopRuntimeController this module needs. Structural, so
+ * tests can drive the seam with recorded snapshots and a scripted command
+ * port instead of a full Electron shell.
+ */
+export interface LiveInspectorRuntime {
+  getSnapshot(): DesktopRuntimeSnapshot;
+  subscribe(listener: (snapshot: DesktopRuntimeSnapshot) => void): () => void;
+  command(targetId: string, intent: CommandIntent): Promise<CommandResult>;
+}
+
+const ENABLED: PaneActionAvailability = Object.freeze({ enabled: true, reason: null });
+
+// Actions the wire has no command for. Disabled with the honest reason —
+// never a silent no-op that pretends the host heard something.
+const NO_STEER: PaneActionAvailability = Object.freeze({
+  enabled: false,
+  reason: "This host cannot take a note for a single agent.",
+});
+const NO_WAKE: PaneActionAvailability = Object.freeze({
+  enabled: false,
+  reason: "This host cannot wake an agent from here.",
+});
+const NO_DISCARD: PaneActionAvailability = Object.freeze({
+  enabled: false,
+  reason: "This host cannot discard a change from here.",
+});
+
+/** Protocol features a command additionally depends on, beyond capability. */
+const FEATURE_BY_COMMAND: Readonly<Record<string, string>> = {
+  "files.list": "files.list",
+  "files.diff": "files.diff",
+};
+
+/**
+ * Is one wire command usable against this host right now? Connection,
+ * granted capability, negotiated feature, and the host's own catalog all
+ * get a veto; the first missing piece names itself.
+ */
+export function commandAvailability(
+  snapshot: DesktopRuntimeSnapshot,
+  targetId: string,
+  hostId: string,
+  command: string,
+): PaneActionAvailability {
+  if (snapshot.connections.get(targetId) !== "connected") {
+    return { enabled: false, reason: "This host is offline right now." };
+  }
+  const host = snapshot.hosts.get(hostId);
+  if (host === undefined) {
+    return { enabled: false, reason: "Waiting for this host to answer." };
+  }
+  const capability = requiredCapability(command);
+  if (capability === undefined || !host.grantedCapabilities.includes(capability)) {
+    return { enabled: false, reason: "This host has not allowed this action for this device." };
+  }
+  const feature = FEATURE_BY_COMMAND[command];
+  if (feature !== undefined && !host.grantedFeatures.includes(feature)) {
+    return { enabled: false, reason: "This host's runtime does not support this action." };
+  }
+  const catalog = snapshot.catalogs.get(hostId);
+  if (catalog !== undefined) {
+    const item = catalog.items.find(
+      (candidate) =>
+        candidate.kind === "command" &&
+        (String(candidate.id) === command || candidate.name === command),
+    );
+    if (item !== undefined && item.supported === false) {
+      return { enabled: false, reason: item.reason ?? "This host has turned this action off." };
+    }
+  }
+  return ENABLED;
+}
+
+/** Per-action availability for one session, from the current runtime truth. */
+export function deriveActionAvailability(
+  snapshot: DesktopRuntimeSnapshot,
+  targetId: string,
+  hostId: string,
+  revisionKnown: boolean,
+): InspectorActionAvailability {
+  const apply = commandAvailability(snapshot, targetId, hostId, "review.apply");
+  return {
+    agentSteer: NO_STEER,
+    agentCancel: commandAvailability(snapshot, targetId, hostId, "agent.cancel"),
+    agentWake: NO_WAKE,
+    reviewApply:
+      apply.enabled && !revisionKnown
+        ? { enabled: false, reason: "Waiting for this session's latest state." }
+        : apply,
+    reviewDiscard: NO_DISCARD,
+  };
+}
+
+function sameAvailability(
+  a: InspectorActionAvailability,
+  b: InspectorActionAvailability,
+): boolean {
+  const pairs: ReadonlyArray<readonly [PaneActionAvailability, PaneActionAvailability]> = [
+    [a.agentSteer, b.agentSteer],
+    [a.agentCancel, b.agentCancel],
+    [a.agentWake, b.agentWake],
+    [a.reviewApply, b.reviewApply],
+    [a.reviewDiscard, b.reviewDiscard],
+  ];
+  return pairs.every(([left, right]) => left.enabled === right.enabled && left.reason === right.reason);
+}
+
+interface LiveSessionAddress {
+  readonly targetId: string;
+  readonly hostId: string;
+  readonly sessionId: string;
+}
+
+/** Resolve the view id ("host/session") like the session runtime does. */
+function addressForViewId(snapshot: DesktopRuntimeSnapshot, viewId: string): LiveSessionAddress {
+  const resolved = resolveLiveSession(snapshot, viewId);
+  if (resolved !== null) return resolved;
+  const separator = viewId.indexOf("/");
+  return {
+    targetId: "local",
+    hostId: decodeURIComponent(separator > 0 ? viewId.slice(0, separator) : viewId),
+    sessionId: decodeURIComponent(separator > 0 ? viewId.slice(separator + 1) : ""),
+  };
+}
+
+function fileTreeNodesFromListResult(result: unknown): readonly FileTreeNode[] | "error" {
+  if (result === null || typeof result !== "object") return "error";
+  const entries = (result as Record<string, unknown>).entries;
+  if (!Array.isArray(entries)) return "error";
+  const nodes: FileTreeNode[] = [];
+  for (const item of entries) {
+    if (item === null || typeof item !== "object" || Array.isArray(item)) continue;
+    const record = item as Record<string, unknown>;
+    const path = typeof record.path === "string" ? record.path : "";
+    if (!isSafeRelativePath(path)) continue;
+    const kind = record.kind === "dir" || record.kind === "directory" ? "dir" : "file";
+    const slash = path.lastIndexOf("/");
+    nodes.push({ path, name: slash === -1 ? path : path.slice(slash + 1), kind });
+  }
+  return nodes;
+}
+
+/**
+ * One live inspector store for one desktop session. The store starts empty
+ * (no sample data ever), fills from the warm projection, and stays
+ * subscribed for the window's lifetime — reconnects and cached snapshots
+ * update freshness without clearing what was already safely projected.
+ */
+export function createLiveInspectorStore(
+  runtime: LiveInspectorRuntime,
+  viewId: string,
+): InspectorStoreApi {
+  const address = addressForViewId(runtime.getSnapshot(), viewId);
+  const projectionKey = `${address.hostId}\u0000${address.sessionId}`;
+  const wireHostId = brandHostId(address.hostId);
+  const wireSessionId = brandSessionId(address.sessionId);
+
+  const agentCache = new Map<string, AgentNode>();
+  const seenActivity = new Set<string>();
+  /** Directory paths resolved from a real `files.list` answer. */
+  const listedDirs = new Set<string>();
+  /** Directory paths resolved from pushed file frames; refreshed on sync. */
+  const frameDirs = new Set<string>();
+  const pendingDirs = new Map<string, string>();
+  const pendingPreviews = new Map<string, string>();
+  const pendingReviewApplies = new Map<string, string>();
+  let reviewFiles: readonly ReviewFile[] = [];
+  let reviewIdByPath: ReadonlyMap<string, string> = new Map();
+  let availability: InspectorActionAvailability | null = null;
+
+  const warmSession = (snapshot: DesktopRuntimeSnapshot): SessionProjection | undefined =>
+    snapshot.projection.sessions.get(projectionKey);
+
+  const expectedRevision = (): Revision | undefined => {
+    const snapshot = runtime.getSnapshot();
+    const warmRevision = warmSession(snapshot)?.revision;
+    if (warmRevision !== undefined) return brandRevision(warmRevision);
+    return snapshot.projection.sessionIndex.get(projectionKey)?.revision;
+  };
+
+  const sendCommand = (
+    command: string,
+    args: Record<string, unknown>,
+    withRevision: boolean,
+  ): Promise<CommandResult> => {
+    const revisionValue = withRevision ? expectedRevision() : undefined;
+    return runtime.command(address.targetId, {
+      hostId: wireHostId,
+      sessionId: wireSessionId,
+      command,
+      args,
+      ...(revisionValue === undefined ? {} : { expectedRevision: revisionValue }),
+    });
+  };
+
+  const controller = (api: InspectorStoreApi): InspectorController => ({
+    kind: "desktop",
+    performControl(scope) {
+      if (scope.action !== "cancel") return;
+      const snapshot = runtime.getSnapshot();
+      if (!commandAvailability(snapshot, address.targetId, address.hostId, "agent.cancel").enabled) {
+        return;
+      }
+      void sendCommand("agent.cancel", { agentId: scope.agentId }, true).catch(() => {
+        // Outcome unknown: never resent. The next agent frame carries truth.
+      });
+    },
+    performReview(action, path) {
+      if (action !== "apply") return;
+      const snapshot = runtime.getSnapshot();
+      if (!commandAvailability(snapshot, address.targetId, address.hostId, "review.apply").enabled) {
+        return;
+      }
+      const reviewId = reviewIdByPath.get(path);
+      const revisionValue = expectedRevision();
+      if (reviewId === undefined || revisionValue === undefined) return;
+      void runtime
+        .command(address.targetId, {
+          hostId: wireHostId,
+          sessionId: wireSessionId,
+          command: "review.apply",
+          args: { reviewId },
+          expectedRevision: revisionValue,
+        })
+        .then((result) => {
+          // The host decides through its confirmation challenge; only an ok
+          // response frame (matched in sync) flips the row to applied.
+          if (result.accepted) pendingReviewApplies.set(result.requestId, path);
+        })
+        .catch(() => {
+          // Outcome unknown: the row stays pending and is never resent.
+        });
+    },
+    loadDir(path) {
+      const snapshot = runtime.getSnapshot();
+      const listable = commandAvailability(snapshot, address.targetId, address.hostId, "files.list");
+      if (listable.enabled) {
+        void sendCommand("files.list", path === "" ? {} : { path }, false)
+          .then((result) => {
+            if (result.accepted) pendingDirs.set(result.requestId, path);
+            else resolveDir(api, path, "error");
+          })
+          .catch(() => resolveDir(api, path, "error"));
+        return;
+      }
+      // No listing command: the pushed file frames are the whole tree.
+      const listing = fileListingsFromFrames(warmSession(snapshot) ?? emptyProjection())[path];
+      if (listing !== undefined && listing.length > 0) {
+        frameDirs.add(path);
+        resolveDir(api, path, listing);
+      } else {
+        resolveDir(api, path, "error");
+      }
+    },
+    loadPreview(path) {
+      const snapshot = runtime.getSnapshot();
+      const frame = warmSession(snapshot)?.files.get(path);
+      if (frame !== undefined && frame.content !== undefined) {
+        resolvePreview(api, previewFromFileFrame(frame));
+        return;
+      }
+      if (snapshot.connections.get(address.targetId) !== "connected") {
+        resolvePreview(api, { kind: "offline", path });
+        return;
+      }
+      const readable = commandAvailability(snapshot, address.targetId, address.hostId, "files.read");
+      if (readable.enabled) {
+        void sendCommand("files.read", { path }, false)
+          .then((result) => {
+            if (result.accepted) pendingPreviews.set(result.requestId, path);
+            else {
+              resolvePreview(api, {
+                kind: "diagnostic",
+                path,
+                message: "The host could not read this file.",
+              });
+            }
+          })
+          .catch(() =>
+            resolvePreview(api, {
+              kind: "diagnostic",
+              path,
+              message: "The connection dropped before the host answered.",
+            }),
+          );
+        return;
+      }
+      resolvePreview(
+        api,
+        frame !== undefined
+          ? previewFromFileFrame(frame)
+          : { kind: "diagnostic", path, message: "This host cannot read files from here." },
+      );
+    },
+  });
+
+  const store = createInspectorStore({ sampleMode: false, controller });
+
+  const sync = (snapshot: DesktopRuntimeSnapshot): void => {
+    const warm = warmSession(snapshot);
+    const nextAvailability = deriveActionAvailability(
+      snapshot,
+      address.targetId,
+      address.hostId,
+      expectedRevision() !== undefined,
+    );
+    if (availability === null || !sameAvailability(availability, nextAvailability)) {
+      availability = nextAvailability;
+      store.getState().setActionAvailability(nextAvailability);
+    }
+    const offline = snapshot.connections.get(address.targetId) !== "connected";
+    if (store.getState().files.offline !== offline) {
+      store.setState((state) => ({ files: { ...state.files, offline } }));
+    }
+    if (warm === undefined) return;
+
+    for (const frame of warm.agents.values()) {
+      const node = agentNodeFromFrame(frame, warm.events);
+      const previous = agentCache.get(node.id);
+      if (previous !== undefined && sameAgentNode(previous, node)) continue;
+      agentCache.set(node.id, node);
+      store.getState().ingestAgent(node);
+    }
+
+    for (const { key, entry } of collectActivity(warm)) {
+      if (seenActivity.has(key)) continue;
+      seenActivity.add(key);
+      store.getState().ingestActivity(entry);
+    }
+
+    const review = reviewProjectionFromFrames(warm);
+    reviewIdByPath = review.reviewIdByPath;
+    if (!sameReviewFiles(reviewFiles, review.files)) {
+      reviewFiles = review.files;
+      store.setState((state) => ({ review: { ...state.review, files: review.files } }));
+    }
+
+    // Settle command answers that arrived as response frames.
+    for (const [requestId, path] of pendingDirs) {
+      const result = warm.results.get(requestId);
+      if (result === undefined) continue;
+      pendingDirs.delete(requestId);
+      if (result.ok) {
+        const listing = fileTreeNodesFromListResult(result.result);
+        resolveDir(store, path, listing);
+        if (listing !== "error") listedDirs.add(path);
+      } else {
+        resolveDir(store, path, "error");
+      }
+    }
+    for (const [requestId, path] of pendingPreviews) {
+      const result = warm.results.get(requestId);
+      if (result === undefined) continue;
+      pendingPreviews.delete(requestId);
+      const content =
+        result.ok && result.result !== null && typeof result.result === "object"
+          ? (result.result as Record<string, unknown>).content
+          : undefined;
+      resolvePreview(
+        store,
+        typeof content === "string"
+          ? { kind: "code", path, text: content, truncated: content.length >= 8192 }
+          : { kind: "diagnostic", path, message: "The host could not read this file." },
+      );
+    }
+    for (const [requestId, path] of pendingReviewApplies) {
+      const result = warm.results.get(requestId);
+      if (result === undefined) continue;
+      pendingReviewApplies.delete(requestId);
+      // A failed or denied apply leaves the row pending; only ok applies.
+      if (result.ok) resolveReviewOutcome(store, path, "applied");
+    }
+
+    // Refresh frame-derived directory listings as new file frames arrive.
+    if (frameDirs.size > 0) {
+      const listings = fileListingsFromFrames(warm);
+      for (const dir of frameDirs) {
+        if (listedDirs.has(dir)) {
+          frameDirs.delete(dir);
+          continue;
+        }
+        const next = listings[dir];
+        const current = store.getState().files.childrenByPath[dir];
+        if (next !== undefined && Array.isArray(current) && !sameListing(current, next)) {
+          resolveDir(store, dir, next);
+        }
+      }
+    }
+
+    // A pushed frame can answer a preview the command path could not.
+    const { selectedPath, preview } = store.getState().files;
+    if (selectedPath !== null && preview === "loading") {
+      const frame = warm.files.get(selectedPath);
+      if (frame !== undefined && frame.content !== undefined) {
+        resolvePreview(store, previewFromFileFrame(frame));
+      }
+    }
+  };
+
+  sync(runtime.getSnapshot());
+  runtime.subscribe(sync);
+  return store;
+}
+
+function emptyProjection(): SessionProjection {
+  return {
+    hostId: "",
+    sessionId: "",
+    entries: [],
+    events: [],
+    agents: new Map(),
+    terminals: new Map(),
+    files: new Map(),
+    reviews: new Map(),
+    audit: [],
+    confirmations: new Map(),
+    results: new Map(),
+    freshness: "cached",
+    entryIds: new Set(),
+  };
+}
+
+/**
+ * Install the live inspector factory for the desktop shell. Browser mode
+ * never calls this; its fixture factory stays exactly as before.
+ */
+export function installLiveInspector(runtime: DesktopRuntimeController): void {
+  installInspectorStoreFactory((viewId) => createLiveInspectorStore(runtime, viewId));
+}

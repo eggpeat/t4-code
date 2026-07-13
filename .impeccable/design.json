@@ -1,0 +1,319 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-11T00:00:00Z",
+  "title": "Design System: T4 Code",
+  "extensions": {
+    "colorMeta": {
+      "brand": {
+        "role": "primary",
+        "displayName": "Pi Pink",
+        "canonical": "#e83174",
+        "dark": "#e83174",
+        "tonalRamp": ["oklch(0.15 0.187 47.6)", "oklch(0.26 0.187 47.6)", "oklch(0.38 0.187 47.6)", "oklch(0.49 0.187 47.6)", "oklch(0.60 0.187 47.6)", "oklch(0.72 0.187 47.6)", "oklch(0.83 0.10 47.6)", "oklch(0.95 0.04 47.6)"]
+      },
+      "primary": {
+        "role": "primary",
+        "displayName": "Raspberry Action Pink",
+        "canonical": "oklch(0.52 0.185 5)",
+        "dark": "oklch(0.72 0.165 4)",
+        "tonalRamp": ["oklch(0.15 0.195 38.4)", "oklch(0.26 0.195 38.4)", "oklch(0.38 0.195 38.4)", "oklch(0.49 0.195 38.4)", "oklch(0.60 0.195 38.4)", "oklch(0.72 0.16 38.4)", "oklch(0.83 0.10 38.4)", "oklch(0.95 0.04 38.4)"]
+      },
+      "accent-text": {
+        "role": "primary",
+        "displayName": "Pink Accent Text",
+        "canonical": "oklch(0.52 0.185 5)",
+        "dark": "oklch(0.78 0.13 4)"
+      },
+      "background": {
+        "role": "neutral",
+        "displayName": "Paper White",
+        "canonical": "#ffffff",
+        "dark": "color-mix(in srgb, oklch(0.145 0 0) 95%, #ffffff)",
+        "tonalRamp": ["oklch(0.15 0 0)", "oklch(0.26 0 0)", "oklch(0.38 0 0)", "oklch(0.49 0 0)", "oklch(0.60 0 0)", "oklch(0.72 0 0)", "oklch(0.83 0 0)", "oklch(0.95 0 0)"]
+      },
+      "foreground": {
+        "role": "neutral",
+        "displayName": "Graphite Ink",
+        "canonical": "oklch(0.269 0 0)",
+        "dark": "oklch(0.97 0 0)",
+        "tonalRamp": ["oklch(0.15 0 0)", "oklch(0.26 0 0)", "oklch(0.38 0 0)", "oklch(0.49 0 0)", "oklch(0.60 0 0)", "oklch(0.72 0 0)", "oklch(0.83 0 0)", "oklch(0.95 0 0)"]
+      },
+      "muted-foreground": {
+        "role": "neutral",
+        "displayName": "Recede Gray",
+        "canonical": "oklch(0.556 0 0)",
+        "dark": "oklch(0.708 0 0)",
+        "tonalRamp": ["oklch(0.15 0 0)", "oklch(0.26 0 0)", "oklch(0.38 0 0)", "oklch(0.49 0 0)", "oklch(0.60 0 0)", "oklch(0.72 0 0)", "oklch(0.83 0 0)", "oklch(0.95 0 0)"]
+      },
+      "secondary": {
+        "role": "neutral",
+        "displayName": "Four-Percent Wash",
+        "canonical": "rgb(0 0 0 / 4%)",
+        "dark": "rgb(255 255 255 / 4%)"
+      },
+      "border": {
+        "role": "neutral",
+        "displayName": "Hairline",
+        "canonical": "rgb(0 0 0 / 8%)",
+        "dark": "rgb(255 255 255 / 6%)"
+      },
+      "input": {
+        "role": "neutral",
+        "displayName": "Field Line",
+        "canonical": "rgb(0 0 0 / 10%)",
+        "dark": "rgb(255 255 255 / 8%)"
+      },
+      "mark-pin": {
+        "role": "neutral",
+        "displayName": "Pin Black",
+        "canonical": "#0d0d0d",
+        "dark": "#0d0d0d"
+      },
+      "destructive": {
+        "role": "secondary",
+        "displayName": "Signal Red",
+        "canonical": "oklch(0.637 0.237 25.331)",
+        "dark": "color-mix(in srgb, oklch(0.637 0.237 25.331) 90%, #ffffff)",
+        "tonalRamp": ["oklch(0.15 0.237 25.331)", "oklch(0.26 0.237 25.331)", "oklch(0.38 0.237 25.331)", "oklch(0.49 0.237 25.331)", "oklch(0.60 0.237 25.331)", "oklch(0.72 0.18 25.331)", "oklch(0.83 0.10 25.331)", "oklch(0.95 0.04 25.331)"]
+      },
+      "destructive-foreground": {
+        "role": "secondary",
+        "displayName": "Signal Red Text",
+        "canonical": "oklch(0.505 0.213 27.518)",
+        "dark": "oklch(0.704 0.191 22.216)"
+      },
+      "info": {
+        "role": "secondary",
+        "displayName": "Channel Blue",
+        "canonical": "oklch(0.623 0.214 259.815)",
+        "dark": "oklch(0.623 0.214 259.815)",
+        "tonalRamp": ["oklch(0.15 0.214 259.815)", "oklch(0.26 0.214 259.815)", "oklch(0.38 0.214 259.815)", "oklch(0.49 0.214 259.815)", "oklch(0.60 0.214 259.815)", "oklch(0.72 0.16 259.815)", "oklch(0.83 0.10 259.815)", "oklch(0.95 0.04 259.815)"]
+      },
+      "info-foreground": {
+        "role": "secondary",
+        "displayName": "Channel Blue Text",
+        "canonical": "oklch(0.488 0.243 264.376)",
+        "dark": "oklch(0.707 0.165 254.624)"
+      },
+      "success": {
+        "role": "secondary",
+        "displayName": "Steady Green",
+        "canonical": "oklch(0.696 0.17 162.48)",
+        "dark": "oklch(0.696 0.17 162.48)",
+        "tonalRamp": ["oklch(0.15 0.17 162.48)", "oklch(0.26 0.17 162.48)", "oklch(0.38 0.17 162.48)", "oklch(0.49 0.17 162.48)", "oklch(0.60 0.17 162.48)", "oklch(0.72 0.15 162.48)", "oklch(0.83 0.10 162.48)", "oklch(0.95 0.04 162.48)"]
+      },
+      "success-foreground": {
+        "role": "secondary",
+        "displayName": "Steady Green Text",
+        "canonical": "oklch(0.508 0.118 165.612)",
+        "dark": "oklch(0.765 0.177 163.223)"
+      },
+      "warning": {
+        "role": "secondary",
+        "displayName": "Amber Caution",
+        "canonical": "oklch(0.769 0.188 70.08)",
+        "dark": "oklch(0.769 0.188 70.08)",
+        "tonalRamp": ["oklch(0.15 0.188 70.08)", "oklch(0.26 0.188 70.08)", "oklch(0.38 0.188 70.08)", "oklch(0.49 0.188 70.08)", "oklch(0.60 0.188 70.08)", "oklch(0.72 0.188 70.08)", "oklch(0.83 0.12 70.08)", "oklch(0.95 0.05 70.08)"]
+      },
+      "warning-foreground": {
+        "role": "secondary",
+        "displayName": "Amber Caution Text",
+        "canonical": "oklch(0.555 0.163 48.998)",
+        "dark": "oklch(0.828 0.189 84.429)"
+      },
+      "status-working": {
+        "role": "tertiary",
+        "displayName": "Working Sky",
+        "canonical": "oklch(0.588 0.158 241.966)",
+        "dark": "oklch(0.828 0.111 230.318 / 0.8)",
+        "dot": "oklch(0.685 0.169 237.323)",
+        "tonalRamp": ["oklch(0.15 0.158 241.966)", "oklch(0.26 0.158 241.966)", "oklch(0.38 0.158 241.966)", "oklch(0.49 0.158 241.966)", "oklch(0.60 0.158 241.966)", "oklch(0.72 0.13 241.966)", "oklch(0.83 0.09 241.966)", "oklch(0.95 0.03 241.966)"]
+      },
+      "status-approval": {
+        "role": "tertiary",
+        "displayName": "Approval Amber",
+        "canonical": "oklch(0.666 0.179 58.318)",
+        "dark": "oklch(0.879 0.169 91.605 / 0.9)",
+        "dot": "oklch(0.769 0.188 70.08)",
+        "tonalRamp": ["oklch(0.15 0.179 58.318)", "oklch(0.26 0.179 58.318)", "oklch(0.38 0.179 58.318)", "oklch(0.49 0.179 58.318)", "oklch(0.60 0.179 58.318)", "oklch(0.72 0.16 58.318)", "oklch(0.83 0.11 58.318)", "oklch(0.95 0.04 58.318)"]
+      },
+      "status-input": {
+        "role": "tertiary",
+        "displayName": "Input Indigo",
+        "canonical": "oklch(0.511 0.262 276.966)",
+        "dark": "oklch(0.785 0.115 274.713 / 0.9)",
+        "dot": "oklch(0.585 0.233 277.117)",
+        "tonalRamp": ["oklch(0.15 0.262 276.966)", "oklch(0.26 0.262 276.966)", "oklch(0.38 0.262 276.966)", "oklch(0.49 0.262 276.966)", "oklch(0.60 0.22 276.966)", "oklch(0.72 0.16 276.966)", "oklch(0.83 0.10 276.966)", "oklch(0.95 0.04 276.966)"]
+      },
+      "status-plan": {
+        "role": "tertiary",
+        "displayName": "Plan Violet",
+        "canonical": "oklch(0.541 0.281 293.009)",
+        "dark": "oklch(0.811 0.111 293.571 / 0.9)",
+        "dot": "oklch(0.606 0.25 292.717)",
+        "tonalRamp": ["oklch(0.15 0.281 293.009)", "oklch(0.26 0.281 293.009)", "oklch(0.38 0.281 293.009)", "oklch(0.49 0.281 293.009)", "oklch(0.60 0.23 293.009)", "oklch(0.72 0.17 293.009)", "oklch(0.83 0.11 293.009)", "oklch(0.95 0.04 293.009)"]
+      },
+      "status-done": {
+        "role": "tertiary",
+        "displayName": "Done Emerald",
+        "canonical": "oklch(0.596 0.145 163.225)",
+        "dark": "oklch(0.845 0.143 164.978 / 0.9)",
+        "dot": "oklch(0.696 0.17 162.48)",
+        "tonalRamp": ["oklch(0.15 0.145 163.225)", "oklch(0.26 0.145 163.225)", "oklch(0.38 0.145 163.225)", "oklch(0.49 0.145 163.225)", "oklch(0.60 0.145 163.225)", "oklch(0.72 0.13 163.225)", "oklch(0.83 0.09 163.225)", "oklch(0.95 0.03 163.225)"]
+      },
+      "status-error": {
+        "role": "tertiary",
+        "displayName": "Error Crimson",
+        "canonical": "oklch(0.577 0.245 27.325)",
+        "dark": "oklch(0.808 0.114 19.571 / 0.9)",
+        "dot": "oklch(0.637 0.237 25.331)",
+        "tonalRamp": ["oklch(0.15 0.245 27.325)", "oklch(0.26 0.245 27.325)", "oklch(0.38 0.245 27.325)", "oklch(0.49 0.245 27.325)", "oklch(0.60 0.22 27.325)", "oklch(0.72 0.16 27.325)", "oklch(0.83 0.10 27.325)", "oklch(0.95 0.04 27.325)"]
+      },
+      "primary-foreground": {
+        "role": "primary",
+        "displayName": "Action Foreground",
+        "canonical": "#ffffff",
+        "dark": "oklch(0.145 0 0)"
+      }
+    },
+    "typographyMeta": {
+      "heading": { "displayName": "Heading", "purpose": "Dialog, sheet, and empty-state titles; font-heading font-semibold text-xl leading-none." },
+      "body": { "displayName": "Body", "purpose": "Default UI text; controls declare text-base sm:text-sm so narrow/touch windows read larger." },
+      "label": { "displayName": "Label", "purpose": "Status pills (sentence case) and section headers (uppercase tracking-wide); always font-medium." },
+      "mono": { "displayName": "Mono", "purpose": "Terminal surfaces, code, and paths; JetBrains Mono first for deterministic metrics." }
+    },
+    "shadows": [
+      { "name": "surface-edge-shadow", "value": "0 1px rgb(0 0 0 / 4%)", "darkValue": "0 -1px rgb(255 255 255 / 6%)", "purpose": "Hairline top-edge bevel on raised surfaces (cards, outline buttons, popups)." },
+      { "name": "bevel-highlight", "value": "inset 0 1px rgb(255 255 255 / 16%)", "purpose": "1px inset highlight on solid buttons at rest." },
+      { "name": "bevel-pressed", "value": "inset 0 1px rgb(0 0 0 / 8%)", "purpose": "Replaces the highlight while a solid button is pressed." },
+      { "name": "composer-shadow", "value": "0 8px 24px rgb(0 0 0 / 8%)", "darkValue": "0 8px 24px rgb(0 0 0 / 40%)", "purpose": "Floating composer; pairs with 12px backdrop blur." },
+      { "name": "overlay-shadow", "value": "0 16px 40px rgb(0 0 0 / 10%)", "darkValue": "0 16px 40px rgb(0 0 0 / 50%)", "purpose": "Dialogs and overlay panels — the floating tier." }
+    ],
+    "motion": [
+      { "name": "motion-duration-fast", "value": "150ms", "purpose": "Palette fade/scale." },
+      { "name": "motion-duration-base", "value": "200ms", "purpose": "Expand/collapse, sheet, drawer, dialog enter/exit." },
+      { "name": "motion-duration-slow", "value": "500ms", "purpose": "Meters." },
+      { "name": "motion-ease-out", "value": "cubic-bezier(0, 0, 0.2, 1)", "purpose": "Default easing for state transitions." },
+      { "name": "animate-skeleton", "value": "skeleton 2s ease-in-out infinite", "purpose": "Skeleton shimmer sweep; disabled under reduced motion." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px", "purpose": "Control sizes and text step down; dialogs stop bottom-sticking." },
+      { "name": "pane-dock", "value": "980px", "purpose": "Right pane docks above this width, sheet below." },
+      { "name": "xl", "value": "1280px", "purpose": "Gallery/dense two-column layouts." }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "The single strongest action on a surface; accent fill with bevel highlight.",
+      "html": "<button class=\"ds-btn-primary\">Save</button>",
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 36px; padding: 0 11px; border: 1px solid var(--primary, oklch(0.52 0.185 5)); border-radius: 10px; background: var(--primary, oklch(0.52 0.185 5)); color: var(--primary-foreground, #ffffff); font-family: 'DM Sans Variable', -apple-system, 'Segoe UI', system-ui, sans-serif; font-size: 0.875rem; font-weight: 500; cursor: pointer; box-shadow: inset 0 1px rgb(255 255 255 / 16%), 0 1px 2px oklch(0.553 0.195 38.4 / 0.24); transition: box-shadow 200ms cubic-bezier(0, 0, 0.2, 1); } .ds-btn-primary:hover { background: color-mix(in srgb, var(--primary, oklch(0.52 0.185 5)) 90%, transparent); } .ds-btn-primary:active { box-shadow: inset 0 1px rgb(0 0 0 / 8%); } .ds-btn-primary:focus-visible { outline: none; box-shadow: 0 0 0 1px var(--background, #ffffff), 0 0 0 3px var(--ring, oklch(0.52 0.185 5)); } .ds-btn-primary:disabled { opacity: 0.64; pointer-events: none; box-shadow: none; }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Default secondary action; field-line border with the hairline surface-edge bevel.",
+      "html": "<button class=\"ds-btn-outline\">Cancel</button>",
+      "css": ".ds-btn-outline { position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 8px; height: 36px; padding: 0 11px; border: 1px solid var(--input, rgb(0 0 0 / 10%)); border-radius: 10px; background: var(--popover, #ffffff); color: var(--foreground, oklch(0.269 0 0)); font-family: 'DM Sans Variable', -apple-system, 'Segoe UI', system-ui, sans-serif; font-size: 0.875rem; font-weight: 500; cursor: pointer; box-shadow: 0 1px 2px rgb(0 0 0 / 5%), var(--surface-edge-shadow, 0 1px rgb(0 0 0 / 4%)); transition: box-shadow 200ms cubic-bezier(0, 0, 0.2, 1); } .ds-btn-outline:hover { background: color-mix(in srgb, var(--accent, rgb(0 0 0 / 4%)) 50%, transparent); } .ds-btn-outline:active { box-shadow: none; } .ds-btn-outline:focus-visible { outline: none; box-shadow: 0 0 0 1px var(--background, #ffffff), 0 0 0 3px var(--ring, oklch(0.52 0.185 5)); }"
+    },
+    {
+      "name": "Ghost Icon Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Square icon-only control; transparent at rest, four-percent wash on hover; accessible name mandatory.",
+      "html": "<button class=\"ds-icon-btn\" aria-label=\"Settings\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><circle cx=\"12\" cy=\"12\" r=\"3\"/><path d=\"M12 1v2m0 18v2M4.2 4.2l1.4 1.4m12.8 12.8 1.4 1.4M1 12h2m18 0h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4\"/></svg></button>",
+      "css": ".ds-icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border: 1px solid transparent; border-radius: 10px; background: transparent; color: var(--muted-foreground, oklch(0.556 0 0)); cursor: pointer; transition: background 200ms cubic-bezier(0, 0, 0.2, 1); } .ds-icon-btn:hover { background: var(--accent, rgb(0 0 0 / 4%)); } .ds-icon-btn:focus-visible { outline: none; box-shadow: 0 0 0 1px var(--background, #ffffff), 0 0 0 3px var(--ring, oklch(0.52 0.185 5)); }"
+    },
+    {
+      "name": "Solid Badge",
+      "kind": "chip",
+      "refersTo": "badge-default",
+      "description": "Count or emphasis badge on the action tier; compact rounded-sm unit.",
+      "html": "<span class=\"ds-badge-solid\">3</span>",
+      "css": ".ds-badge-solid { display: inline-flex; align-items: center; justify-content: center; gap: 4px; height: 22px; min-width: 22px; padding: 0 3px; border-radius: 6px; background: var(--primary, oklch(0.52 0.185 5)); color: var(--primary-foreground, #ffffff); font-family: 'DM Sans Variable', -apple-system, 'Segoe UI', system-ui, sans-serif; font-size: 0.875rem; font-weight: 500; white-space: nowrap; }"
+    },
+    {
+      "name": "Success Tint Badge",
+      "kind": "chip",
+      "refersTo": "badge-success",
+      "description": "Semantic tint badge: 8% hue wash with matching foreground text; info/warning/error follow the same recipe.",
+      "html": "<span class=\"ds-badge-success\">passed</span>",
+      "css": ".ds-badge-success { display: inline-flex; align-items: center; justify-content: center; gap: 4px; height: 22px; min-width: 22px; padding: 0 6px; border-radius: 6px; background: color-mix(in srgb, var(--success, oklch(0.696 0.17 162.48)) 8%, transparent); color: var(--success-foreground, oklch(0.508 0.118 165.612)); font-family: 'DM Sans Variable', -apple-system, 'Segoe UI', system-ui, sans-serif; font-size: 0.875rem; font-weight: 500; white-space: nowrap; }"
+    },
+    {
+      "name": "Status Pill (Working)",
+      "kind": "custom",
+      "refersTo": "status-pill",
+      "description": "Signature session-status indicator: 6px dot plus sentence-case label; working/connecting pulse, never color-only.",
+      "html": "<span class=\"ds-status-pill\"><span class=\"ds-status-dot-wrap\" aria-hidden=\"true\"><span class=\"ds-status-ping\"></span><span class=\"ds-status-dot\"></span></span>Working</span>",
+      "css": ".ds-status-pill { display: inline-flex; align-items: center; gap: 6px; color: var(--status-working, oklch(0.588 0.158 241.966)); font-family: 'DM Sans Variable', -apple-system, 'Segoe UI', system-ui, sans-serif; font-size: 0.75rem; font-weight: 500; } .ds-status-dot-wrap { position: relative; display: flex; width: 6px; height: 6px; } .ds-status-dot { position: relative; display: inline-flex; width: 6px; height: 6px; border-radius: 9999px; background: var(--status-working-dot, oklch(0.685 0.169 237.323)); } .ds-status-ping { position: absolute; display: inline-flex; width: 100%; height: 100%; border-radius: 9999px; background: var(--status-working-dot, oklch(0.685 0.169 237.323)); opacity: 0.75; animation: ds-ping 1s cubic-bezier(0, 0, 0.2, 1) infinite; } @keyframes ds-ping { 75%, 100% { transform: scale(2); opacity: 0; } } @media (prefers-reduced-motion: reduce) { .ds-status-ping { display: none; } }"
+    },
+    {
+      "name": "Tooltip",
+      "kind": "custom",
+      "refersTo": "tooltip",
+      "description": "Popover chip for hover hints; hairline border, edge bevel, label-size text.",
+      "html": "<span class=\"ds-tooltip\">Session actions</span>",
+      "css": ".ds-tooltip { position: relative; display: inline-flex; padding: 4px 8px; border: 1px solid var(--border, rgb(0 0 0 / 8%)); border-radius: 8px; background: var(--popover, #ffffff); color: var(--popover-foreground, oklch(0.269 0 0)); font-family: 'DM Sans Variable', -apple-system, 'Segoe UI', system-ui, sans-serif; font-size: 0.75rem; box-shadow: 0 4px 6px rgb(0 0 0 / 5%), var(--surface-edge-shadow, 0 1px rgb(0 0 0 / 4%)); }"
+    },
+    {
+      "name": "Dialog Surface",
+      "kind": "card",
+      "refersTo": "dialog",
+      "description": "Floating-tier overlay card: 16px radius, hairline border, overlay shadow; the resting-card recipe drops the shadow to the edge bevel.",
+      "html": "<div class=\"ds-dialog\"><div class=\"ds-dialog-header\"><h3 class=\"ds-dialog-title\">Rename session</h3><p class=\"ds-dialog-desc\">Give this session a clearer name.</p></div><div class=\"ds-dialog-footer\"><button class=\"ds-dialog-cancel\">Cancel</button><button class=\"ds-dialog-save\">Save</button></div></div>",
+      "css": ".ds-dialog { display: flex; flex-direction: column; max-width: 32rem; border: 1px solid var(--border, rgb(0 0 0 / 8%)); border-radius: 16px; background: var(--popover, #ffffff); color: var(--popover-foreground, oklch(0.269 0 0)); font-family: 'DM Sans Variable', -apple-system, 'Segoe UI', system-ui, sans-serif; box-shadow: var(--overlay-shadow, 0 16px 40px rgb(0 0 0 / 10%)), var(--surface-edge-shadow, 0 1px rgb(0 0 0 / 4%)); overflow: hidden; } .ds-dialog-header { display: flex; flex-direction: column; gap: 8px; padding: 24px; } .ds-dialog-title { margin: 0; font-size: 1.25rem; font-weight: 600; line-height: 1; } .ds-dialog-desc { margin: 0; color: var(--muted-foreground, oklch(0.556 0 0)); font-size: 0.875rem; } .ds-dialog-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 16px 24px; border-top: 1px solid var(--border, rgb(0 0 0 / 8%)); background: color-mix(in srgb, var(--muted, rgb(0 0 0 / 4%)) 72%, transparent); } .ds-dialog-cancel, .ds-dialog-save { height: 36px; padding: 0 11px; border-radius: 10px; font-family: inherit; font-size: 0.875rem; font-weight: 500; cursor: pointer; } .ds-dialog-cancel { border: 1px solid var(--input, rgb(0 0 0 / 10%)); background: var(--popover, #ffffff); color: var(--foreground, oklch(0.269 0 0)); } .ds-dialog-cancel:hover { background: var(--accent, rgb(0 0 0 / 4%)); } .ds-dialog-save { border: 1px solid var(--primary, oklch(0.52 0.185 5)); background: var(--primary, oklch(0.52 0.185 5)); color: var(--primary-foreground, #ffffff); box-shadow: inset 0 1px rgb(255 255 255 / 16%); } .ds-dialog-save:hover { background: color-mix(in srgb, var(--primary, oklch(0.52 0.185 5)) 90%, transparent); }"
+    },
+    {
+      "name": "Skeleton",
+      "kind": "custom",
+      "refersTo": "skeleton",
+      "description": "Loading placeholder: muted bar with a fixed-attachment highlight sweep; static under reduced motion.",
+      "html": "<div class=\"ds-skeleton-stack\"><div class=\"ds-skeleton\" style=\"width: 75%\"></div><div class=\"ds-skeleton\" style=\"width: 100%\"></div><div class=\"ds-skeleton\" style=\"width: 50%\"></div></div>",
+      "css": ".ds-skeleton-stack { display: flex; flex-direction: column; gap: 8px; width: 224px; } .ds-skeleton { height: 16px; border-radius: 6px; background: linear-gradient(120deg, transparent 40%, var(--skeleton-highlight, rgb(255 255 255 / 64%)), transparent 60%) var(--muted, rgb(0 0 0 / 4%)) 0 0 / 200% 100% fixed; animation: ds-skeleton 2s ease-in-out infinite; } @keyframes ds-skeleton { from { background-position-x: 200%; } to { background-position-x: 0%; } } @media (prefers-reduced-motion: reduce) { .ds-skeleton { animation: none; } }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Quiet Control Room",
+    "overview": "T4 Code (powered by Oh My Pi) is the observability and control surface for a running agent runtime, and it looks like one: pure neutral light and dark surfaces, a strict two-tier Pi Pink identity, and semantic status hues that are never allowed to blur into brand. The interface carries the confidence of a mature developer tool — dense when the work demands it, quiet when it does not. Nothing decorates; every color, shadow, and motion token reports state. packages/ui/src/tokens.css is the only file allowed to contain raw color values; every component consumes tokens by CSS variable or Tailwind theme class. The product identity is the BrandLockup: the exact OMP pi/plugin mark beside the T4 Code wordmark, with the Powered by Oh My Pi byline reserved for onboarding, about, and the empty welcome.\n\nThe system explicitly rejects the generic AI dashboard: no oversized metric cards, no decorative agent graphs, no chat toys. It also deliberately overrides its own interaction reference (T3 Code): no turbulence/grain overlay, no warm cream or paper themes, no glass-card monoculture, no gradient text, no oversized rounding, no decorative side stripes. Surfaces are zero-chroma neutral; the Pi Pink accent appears only where identity or action genuinely lives.\n\nMotion is vocabulary, not spectacle: 150 ms (--motion-duration-fast) palette fade/scale, 200 ms ease-out (--motion-duration-base, cubic-bezier(0, 0, 0.2, 1)) expand/collapse/sheet/drawer, 500 ms (--motion-duration-slow) meters, ping only on actively live status dots. Theme flips and panel drags suppress all transitions (.no-transitions); reduced motion zeroes every duration token and disables animation entirely.",
+    "keyCharacteristics": [
+      "Pure neutral surface ramps (zero chroma) in both themes; hue appears only with meaning.",
+      "Two-tier Pi Pink: #e83174 identity-only, oklch(0.52 0.185 5) contrast-safe action tier (~4.8:1 on white).",
+      "Semantic status taxonomy (working/approval/input/plan/done/error) with brand pink banned from it.",
+      "Hairline depth: 1px borders, top-edge bevel shadows, near-flat elevation.",
+      "4 px spacing grid, 0.625 rem base radius, 48 rem transcript measure, 6 px scrollbars.",
+      "Deterministic bundled fonts: DM Sans Variable for UI, JetBrains Mono first in the mono stack.",
+      "State-only motion with a full reduced-motion path."
+    ],
+    "rules": [
+      { "name": "The Two-Tier Pink Rule", "body": "#e83174 is identity; oklch(0.52 0.185 5) is action. Text or fills that must pass contrast never use raw #e83174 in light mode.", "section": "colors" },
+      { "name": "The Pink-Is-Never-Warning Rule", "body": "Warning is --warning (amber). Status is the --status-* taxonomy. Pi Pink stays identity, always.", "section": "colors" },
+      { "name": "The One Token File Rule", "body": "Raw color values exist only in packages/ui/src/tokens.css. A raw color literal anywhere else is a defect.", "section": "colors" },
+      { "name": "The One Family Rule", "body": "DM Sans carries every UI register through weight and size alone; the only second family is the mono, and it belongs to the runtime's output.", "section": "typography" },
+      { "name": "The 48rem Measure Rule", "body": "Transcript prose never exceeds --transcript-measure (48rem).", "section": "typography" },
+      { "name": "The Hairline Bevel Rule", "body": "Rest-state depth is a 1px edge, never a blur. If a resting card casts a visible drop shadow, it is wrong.", "section": "elevation" },
+      { "name": "The Floating-Tier Rule", "body": "Real shadows belong only to things that float: composer, dialogs, sheets, tooltips, overlays.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do keep every raw color in packages/ui/src/tokens.css; consume tokens by CSS variable or theme class everywhere else.",
+      "Do use oklch(0.52 0.185 5) for accent actions and focus rings in light mode, reserving #e83174 for non-text identity.",
+      "Do express state through the fixed status taxonomy and semantic hues — distinct, color-blind-safe, never brand pink.",
+      "Do hold the 4px spacing grid, 0.625rem base radius, 1px borders, and hairline bevels.",
+      "Do honor reduced motion completely: zero duration tokens, no ping, no smooth scrolling, no transitions during theme flips or drags.",
+      "Do keep the right pane closed by default and earn attention with badges; only plan review may auto-open it.",
+      "Do pair every status dot with a text label (visible or aria-label) and keep focus rings at 3:1 non-text contrast."
+    ],
+    "donts": [
+      "Don't build generic AI workflow dashboards, oversized metric cards, decorative agent graphs, or chat toys.",
+      "Don't import T3 Code's cloud, Clerk, relay, billing, or provider assumptions; T3 is an interaction and visual reference, not a product model.",
+      "Don't use broad accent washes, pink or orange warning semantics, warm cream or paper themes, glass-card monoculture, gradient text, fake grain, turbulence, or sketch effects — the T3 turbulence/grain overlay is explicitly banned.",
+      "Don't add permanent dashboard side panes, modal-first workflows, noisy auto-opening panels, or decorative continuous motion.",
+      "Don't scrape terminals, let the renderer own runtime truth, create hidden duplicate settings stores, or send interactive input into an agent-owned shell.",
+      "Don't use oversized rounding or decorative side stripes; 16px (--radius-2xl) is the ceiling, and a colored border-left stripe is a defect.",
+      "Don't invent lane-specific status colors, a second terminal palette, or any raw color outside tokens.css."
+    ]
+  }
+}

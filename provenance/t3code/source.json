@@ -1,0 +1,11 @@
+{
+  "project": "T3 Code",
+  "sourceUrl": "https://github.com/pingdotgg/t3code",
+  "commit": "f61fa9499d96fee825492aba204593c37b27e0cb",
+  "license": "MIT",
+  "copyright": "2026 T3 Tools Inc.",
+  "licenseFile": "licenses/T3-CODE-MIT.txt",
+  "licenseSha256": "935d8f2af0c703f9c39517ee57cc4930b19d02d533be930b63f0e82f93614b43",
+  "copiedCodeClaimed": true,
+  "imports": ["provenance/t3code/imports/f0-20260711.json"]
+}

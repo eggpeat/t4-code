@@ -1,0 +1,21 @@
+{
+  "name": "T4 Code",
+  "short_name": "T4 Code",
+  "description": "The open-source desktop app for Oh My Pi.",
+  "start_url": "/",
+  "display": "browser",
+  "background_color": "#161616",
+  "theme_color": "#161616",
+  "icons": [
+    {
+      "src": "/icon-256.png",
+      "sizes": "256x256",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

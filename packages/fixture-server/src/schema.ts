@@ -1,0 +1,85 @@
+export const FIXTURE_SEED_SCHEMA = {
+  $schema: "https://json-schema.org/draft/2020-12/schema",
+  $id: "https://t4-code.local/fixture-seed.schema.json",
+  title: "Deterministic OMP fixture seed",
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "schemaVersion",
+    "id",
+    "epoch",
+    "baseTime",
+    "revision",
+    "hostId",
+    "sessionId",
+    "projectId",
+    "scripts",
+    "faults",
+    "expectedHash",
+  ],
+  properties: {
+    schemaVersion: { const: 1 },
+    id: {
+      enum: [
+        "basic-v1",
+        "stream-v1",
+        "hierarchy-v1",
+        "history-10k-v1",
+        "faults-v1",
+        "multi-client-v1",
+        "remote-v1",
+        "a11y-v1",
+        "reconnect-v1",
+        "preview-v1",
+      ],
+    },
+    description: { type: "string", maxLength: 256 },
+    epoch: { type: "string", minLength: 1, maxLength: 128 },
+    baseTime: { type: "string", format: "date-time" },
+    revision: { type: "string", minLength: 1, maxLength: 128 },
+    hostId: { type: "string", minLength: 1, maxLength: 128 },
+    sessionId: { type: "string", minLength: 1, maxLength: 128 },
+    projectId: { type: "string", minLength: 1, maxLength: 128 },
+    historyMessages: { type: "integer", minimum: 0, maximum: 10000 },
+    historyParts: { type: "integer", minimum: 0, maximum: 30000 },
+    scripts: {
+      type: "object",
+      additionalProperties: false,
+      required: ["prompt", "replay"],
+      properties: {
+        prompt: { type: "array", items: { $ref: "#/$defs/scriptStep" } },
+        replay: { enum: ["none", "same-epoch", "gap-snapshot"] },
+      },
+    },
+    faults: {
+      type: "array",
+      items: {
+        type: "object",
+        additionalProperties: false,
+        required: ["id", "frame", "expectedError"],
+        properties: {
+          id: { type: "string", minLength: 1, maxLength: 128 },
+          frame: {},
+          expectedError: { type: "string", minLength: 1, maxLength: 256 },
+        },
+      },
+    },
+    clients: { type: "integer", minimum: 1, maximum: 8 },
+    accessibility: { type: "boolean" },
+    expectedHash: { type: "string", pattern: "^[0-9a-f]{64}$" },
+  },
+  $defs: {
+    scriptStep: {
+      type: "object",
+      additionalProperties: false,
+      required: ["atMs", "kind"],
+      properties: {
+        atMs: { type: "integer", minimum: 0, maximum: 3600000 },
+        kind: { enum: ["entry", "event"] },
+        text: { type: "string", maxLength: 4096 },
+      },
+    },
+  },
+} as const;
+
+export type FixtureSeedSchema = typeof FIXTURE_SEED_SCHEMA;

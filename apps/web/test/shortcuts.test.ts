@@ -1,0 +1,51 @@
+import { describe, expect, it } from "vite-plus/test";
+
+import { resolveShortcut, type ShortcutEventLike } from "../src/keyboard/shortcuts.ts";
+
+function event(partial: Partial<ShortcutEventLike>): ShortcutEventLike {
+  return {
+    key: "",
+    metaKey: false,
+    ctrlKey: false,
+    altKey: false,
+    shiftKey: false,
+    ...partial,
+  };
+}
+
+describe("resolveShortcut", () => {
+  it("maps Cmd/Ctrl+K to the palette on both platforms", () => {
+    expect(resolveShortcut(event({ key: "k", ctrlKey: true }))).toEqual({ kind: "palette" });
+    expect(resolveShortcut(event({ key: "K", metaKey: true }))).toEqual({ kind: "palette" });
+  });
+
+  it("maps Cmd/Ctrl+B to the rail toggle", () => {
+    expect(resolveShortcut(event({ key: "b", ctrlKey: true }))).toEqual({ kind: "toggle-rail" });
+  });
+
+  it("maps Cmd/Ctrl+1..9 to zero-based session positions", () => {
+    expect(resolveShortcut(event({ key: "1", code: "Digit1", ctrlKey: true }))).toEqual({
+      kind: "session-index",
+      index: 0,
+    });
+    expect(resolveShortcut(event({ key: "9", code: "Digit9", metaKey: true }))).toEqual({
+      kind: "session-index",
+      index: 8,
+    });
+  });
+
+  it("resolves digits from the physical key on non-QWERTY layouts", () => {
+    expect(resolveShortcut(event({ key: "&", code: "Digit1", ctrlKey: true }))).toEqual({
+      kind: "session-index",
+      index: 0,
+    });
+  });
+
+  it("ignores unmodified keys, extra modifiers, and other keys", () => {
+    expect(resolveShortcut(event({ key: "k" }))).toBeNull();
+    expect(resolveShortcut(event({ key: "k", ctrlKey: true, shiftKey: true }))).toBeNull();
+    expect(resolveShortcut(event({ key: "k", ctrlKey: true, altKey: true }))).toBeNull();
+    expect(resolveShortcut(event({ key: "0", code: "Digit0", ctrlKey: true }))).toBeNull();
+    expect(resolveShortcut(event({ key: "x", ctrlKey: true }))).toBeNull();
+  });
+});

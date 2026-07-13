@@ -1,0 +1,128 @@
+import type { OmpClient, OmpClientOptions } from "@t4-code/client";
+import { commandId, confirmationId, hostId } from "@t4-code/protocol";
+import { describe, expect, it, afterEach } from "vite-plus/test";
+
+import { resolveRendererPlatform } from "../src/platform/bridge.ts";
+import { createBrowserShellPort, detectBackend } from "../src/platform/browser-shell-port.ts";
+import { BrowserWebSocketTransport } from "../src/platform/browser-transport.ts";
+
+const originalDocument = globalThis.document;
+const originalWindow = globalThis.window;
+
+function setBrowserLocation(search: string): void {
+  Object.defineProperty(globalThis, "window", {
+    configurable: true,
+    value: { location: { search } },
+  });
+}
+
+function setBackendScript(payload: string): void {
+  Object.defineProperty(globalThis, "document", {
+    configurable: true,
+    value: { getElementById: () => ({ textContent: payload }) },
+  });
+}
+
+afterEach(() => {
+  Object.defineProperty(globalThis, "document", { configurable: true, value: originalDocument });
+  Object.defineProperty(globalThis, "window", { configurable: true, value: originalWindow });
+});
+
+describe("browser platform boundary", () => {
+  it("keeps no-config browser mode on the fixture path", () => {
+    Object.defineProperty(globalThis, "document", { configurable: true, value: undefined });
+    Object.defineProperty(globalThis, "window", { configurable: true, value: undefined });
+    const platform = resolveRendererPlatform("linux");
+    expect(platform.mode).toBe("browser");
+    expect(platform.shell).toBeNull();
+  });
+
+  it("accepts explicit script and query config, but rejects invalid config", () => {
+    setBackendScript(JSON.stringify({ wsUrl: "wss://omp.example/v1/ws", label: "Remote OMP", deviceId: "browser-1", deviceToken: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" }));
+    expect(detectBackend()).toEqual({ wsUrl: "wss://omp.example/v1/ws", label: "Remote OMP", deviceId: "browser-1", deviceToken: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" });
+
+    Object.defineProperty(globalThis, "document", { configurable: true, value: undefined });
+    setBrowserLocation("?backend=ws%3A%2F%2F127.0.0.1%2Fv1%2Fws&label=Query");
+    expect(detectBackend()).toEqual({ wsUrl: "ws://127.0.0.1/v1/ws", label: "Query" });
+    setBrowserLocation("?backend=ws%3A%2F%2F127.0.0.1%2Fv1%2Fws&token=leaked");
+    expect(() => detectBackend()).toThrow(/browser auth must not be supplied/u);
+
+    setBackendScript(JSON.stringify({ wsUrl: "https://not-websocket" }));
+    expect(() => detectBackend()).toThrow(/invalid browser backend wsUrl/u);
+  });
+
+  it("exposes one remote target and no local service lifecycle", async () => {
+    setBackendScript(JSON.stringify({ wsUrl: "wss://omp.example/v1/ws", label: "Remote OMP" }));
+    const shell = createBrowserShellPort();
+    expect(shell).not.toBeNull();
+    if (shell === null) return;
+    const result = await shell.listTargets();
+    expect(result.targets).toEqual([expect.objectContaining({ targetId: "remote", kind: "remote", label: "Remote OMP" })]);
+    expect(shell.serviceInspect).toBeUndefined();
+    expect(shell.serviceStart).toBeUndefined();
+    expect(shell.serviceStop).toBeUndefined();
+  });
+
+  it("bounds transport URLs and cleans listeners on close", () => {
+    expect(() => new BrowserWebSocketTransport({ url: "https://not-websocket" })).toThrow(/invalid browser transport URL/u);
+    const transport = new BrowserWebSocketTransport({ url: "wss://omp.example/v1/ws" });
+    const unsubscribeMessage = transport.onMessage(() => undefined);
+    const unsubscribeClose = transport.onClose(() => undefined);
+    const unsubscribeError = transport.onError(() => undefined);
+    unsubscribeMessage();
+    unsubscribeClose();
+    unsubscribeError();
+    transport.close();
+    expect(() => transport.send("{}")) .toThrow(/not connected/u);
+  });
+  it("maps client results, stores pairing auth, and closes client on disconnect", async () => {
+    setBackendScript(JSON.stringify({ wsUrl: "wss://omp.example/v1/ws" }));
+    let capturedOptions: OmpClientOptions | undefined;
+    let connectCalls = 0;
+    let closed = false;
+    let fakeState: "pairing" | "ready" = "pairing";
+    const fakeClient = {
+      get state() { return fakeState; },
+      connect: async () => { connectCalls += 1; },
+      close: async () => { closed = true; },
+      command: async () => ({ requestId: "req", commandId: "cmd", ok: true, result: { value: 1 }, type: "response", v: "0.1" }),
+      confirm: async () => ({ requestId: "confirm", ok: true, type: "response", v: "0.1" }),
+      pairStart: async () => {
+        const callback = capturedOptions?.privilegedPairResult;
+        if (callback === undefined) throw new Error("pair callback missing");
+        await callback({ deviceId: "browser-1", deviceToken: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" } as never);
+        fakeState = "ready";
+        return { type: "pair.ok" };
+      },
+      onFrame: () => () => undefined,
+      onState: () => () => undefined,
+      onError: () => () => undefined,
+    };
+    const shell = createBrowserShellPort({
+      clientFactory: (options) => {
+        capturedOptions = options;
+        return fakeClient as unknown as OmpClient;
+      },
+    });
+    if (shell === null) return;
+    await shell.bootstrap();
+    expect(connectCalls).toBe(0);
+    await shell.connect({ targetId: "remote" });
+    expect(connectCalls).toBe(1);
+    const pair = await shell.pair({ targetId: "remote", code: "123456" });
+    expect(pair.paired).toBe(true);
+    expect(capturedOptions?.authentication?.()).toEqual({ deviceId: "browser-1", deviceToken: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" });
+    const command = await shell.command({ targetId: "remote", intent: { hostId: hostId("host"), command: "session.list", args: {} } });
+    expect(command).toMatchObject({ requestId: "req", commandId: "cmd", accepted: true, result: { value: 1 } });
+    const confirmation = await shell.confirm({
+      targetId: "remote",
+      confirmationId: confirmationId("confirm"),
+      commandId: commandId("cmd"),
+      hostId: hostId("host"),
+      decision: "approve",
+    });
+    expect(confirmation.accepted).toBe(true);
+    await shell.disconnect({ targetId: "remote" });
+    expect(closed).toBe(true);
+  });
+});

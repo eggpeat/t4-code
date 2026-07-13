@@ -1,0 +1,114 @@
+{
+  "batch": "f0-20260711",
+  "sourceCommit": "f61fa9499d96fee825492aba204593c37b27e0cb",
+  "portCommit": "9034155a378a9dff72e4aae7976d6db6dafe5d8e",
+  "adaptationCommit": "4a9871c1fd6a05bab972d0b0b879f1fccb5fce01",
+  "license": "MIT; T3 Tools Inc. 2026; licenses/T3-CODE-MIT.txt",
+  "records": [
+    {
+      "sourcePath": "apps/web/src/components/ui/button.tsx",
+      "sourceBlobSha": "f6d09f7799abf72ad758409a5654b1ef56cef1e3",
+      "targetPath": "packages/ui/src/primitives/button.tsx",
+      "classification": "adapted",
+      "checksum": "sha256:9d0ed03d1b9666f8f6b34d4948a4b71786ec0240cb1648dbf02cd41be2dabc32"
+    },
+    {
+      "sourcePath": "apps/web/src/components/ui/badge.tsx",
+      "sourceBlobSha": "e06d9b9a0d812fc51471a5695da2fc7fa57f2134",
+      "targetPath": "packages/ui/src/primitives/badge.tsx",
+      "classification": "adapted",
+      "checksum": "sha256:353cfd413547bc64892f9bf512ce1d0cb9316930d82d8ff912effd95c5858091"
+    },
+    {
+      "sourcePath": "apps/web/src/components/ui/tooltip.tsx",
+      "sourceBlobSha": "442c394ec220c204ab82aff6b76b3a2e4701e8a8",
+      "targetPath": "packages/ui/src/primitives/tooltip.tsx",
+      "classification": "adapted",
+      "checksum": "sha256:a1b46b18a02855a3fdf1953086c6e39823c44b41292bafd40f4fb14386615c9e"
+    },
+    {
+      "sourcePath": "apps/web/src/components/ui/dialog.tsx",
+      "sourceBlobSha": "3e1b3d69cd15a1e56faa33bef329549d09ceb72a",
+      "targetPath": "packages/ui/src/primitives/dialog.tsx",
+      "classification": "adapted",
+      "checksum": "sha256:7c142265630a937448003bfa599e58dddcf492a5e7b467bf6acbfce8e24ba543"
+    },
+    {
+      "sourcePath": "apps/web/src/components/ui/sheet.tsx",
+      "sourceBlobSha": "9d0436b661da31b0b4944441f9c6971d23af5008",
+      "targetPath": "packages/ui/src/primitives/sheet.tsx",
+      "classification": "adapted",
+      "checksum": "sha256:417882e6a084a56c3ac829b9d3c8ee0711428d77059711ccebfb00b8c077ba08"
+    },
+    {
+      "sourcePath": "apps/web/src/components/ui/scroll-area.tsx",
+      "sourceBlobSha": "d6f178a1f54a0595135b75347908a9c8898d4c2f",
+      "targetPath": "packages/ui/src/primitives/scroll-area.tsx",
+      "classification": "adapted",
+      "checksum": "sha256:5a641dfd6158675f0ccb050bbeedc109e5a80e037ffb93d799ccb51ff1b28f42"
+    },
+    {
+      "sourcePath": "apps/web/src/components/ui/skeleton.tsx",
+      "sourceBlobSha": "b1e481784196f61860ec58eed1986d03221058df",
+      "targetPath": "packages/ui/src/primitives/skeleton.tsx",
+      "classification": "adapted",
+      "checksum": "sha256:f80ce6dc9a7a5fe9cc2ad8c35b1887df72a5be190017cbf3234e9fc94df45974"
+    },
+    {
+      "sourcePath": "apps/web/src/components/ui/empty.tsx",
+      "sourceBlobSha": "5390dd665620f19902e1aa782f4cf1341fea14c3",
+      "targetPath": "packages/ui/src/primitives/empty.tsx",
+      "classification": "adapted",
+      "checksum": "sha256:625e8bc31e3836bf362c43baa0fbacfea161d7d92b6628a90c432c2832774897"
+    },
+    {
+      "sourcePath": "apps/web/src/components/ui/spinner.tsx",
+      "sourceBlobSha": "362b78f954636a2848855eae588cf2ed195b7313",
+      "targetPath": "packages/ui/src/primitives/spinner.tsx",
+      "classification": "adapted",
+      "checksum": "sha256:3789ec807aef4e77ad1916054b59730d5f04df88c8582d61638192a59264140d"
+    },
+    {
+      "sourcePath": "apps/web/src/components/AnimatedHeight.tsx",
+      "sourceBlobSha": "d0e21b3907eebffbb328e72927d35a2e9fdc9dfe",
+      "targetPath": "packages/ui/src/motion/AnimatedHeight.tsx",
+      "classification": "adapted",
+      "checksum": "sha256:a3efbaef32a14b956c4eb4c490b353402aa9fb30abddce14ca8af694b3f155ea"
+    },
+    {
+      "sourcePath": "apps/web/src/hooks/useResizableWidth.ts",
+      "sourceBlobSha": "08c067471f74f0d60dc297effa703b927c183890",
+      "targetPath": "packages/ui/src/layout/useResizableWidth.ts",
+      "classification": "adapted",
+      "checksum": "sha256:40eb9fd4d887236812f2070994fd498d13b427e5d05172e73c79bd59bb2fff14"
+    },
+    {
+      "sourcePath": "apps/web/src/lib/utils.ts",
+      "sourceBlobSha": "b2be5eb7176a6ae9067cc48540afe1ce63e0f257",
+      "targetPath": "packages/ui/src/lib/cn.ts",
+      "classification": "reference-only",
+      "checksum": "sha256:e82959767928934003a12ee72d3fbc21e1e6987c2ef19a8ff18d92034eeb9370"
+    },
+    {
+      "sourcePath": "apps/web/src/components/Sidebar.logic.ts",
+      "sourceBlobSha": "4e7614ed55161f50f756184251c80cf9dfb16ea2",
+      "targetPath": "packages/ui/src/lib/status.ts",
+      "classification": "reference-only",
+      "checksum": "sha256:60b01bc811d1c12a37c773539db78a859bd38f4c6dd365ea44a274ee62a3fd5f"
+    },
+    {
+      "sourcePath": "apps/web/src/components/ThreadTerminalDrawer.tsx",
+      "sourceBlobSha": "1641bb6b109b44f2c7b0f2576fcf0750a96da88f",
+      "targetPath": "packages/ui/src/tokens.css + packages/ui/src/terminal/xtermTheme.ts",
+      "classification": "reference-only",
+      "checksum": "sha256:9cb42304c8cf52aa10bf11068d3ff8b33efb3680e42abfc6addcef67b2da07df;sha256:3168d798b2274b85ef07a06bcc03af060b179a173449a53b91a9c4960dacf0d2"
+    },
+    {
+      "sourcePath": "apps/web/src/index.css",
+      "sourceBlobSha": "3ae42a3e61cac54e9fe75cb58a67313241989ec9",
+      "targetPath": "packages/ui/src/tokens.css",
+      "classification": "reference-only",
+      "checksum": "sha256:9cb42304c8cf52aa10bf11068d3ff8b33efb3680e42abfc6addcef67b2da07df"
+    }
+  ]
+}

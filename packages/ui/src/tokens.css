@@ -1,0 +1,468 @@
+/*
+ * T4 Code design tokens — the ONLY file allowed to contain raw
+ * color values. Every other source file references tokens by CSS variable or
+ * Tailwind theme class.
+ *
+ * Token graph adapted from T3 Code `apps/web/src/index.css` (MIT, T3 Tools
+ * Inc., commit f61fa9499d96fee825492aba204593c37b27e0cb). Values replaced per
+ * the T4 design plan: pure neutral surfaces, a Pi Pink identity with a
+ * user-selectable interactive accent, no grain/noise overlays.
+ */
+
+@custom-variant dark (&:is(.dark, .dark *));
+/* Window Controls Overlay: active when Electron exposes native titlebar control geometry. */
+@custom-variant wco (&:is(.wco, .wco *));
+
+:root {
+  /* Window control / titlebar geometry (T3 workspace vars, kept 1:1). */
+  --app-scrollbar-width: 6px;
+  --workspace-topbar-height: 52px;
+  --workspace-controls-top: 0px;
+  --workspace-controls-left: calc(env(safe-area-inset-left) + 0.75rem);
+  --workspace-controls-right: calc(env(safe-area-inset-right) + 0.75rem);
+  --workspace-native-controls-inset: 0px;
+  --workspace-titlebar-control-size: 1.75rem;
+  --workspace-titlebar-control-gap: 0.75rem;
+
+  /* Motion vocabulary. Fast = hover/pressed/chevron feedback; base =
+     reveal/expand/popover; deliberate = dialogs and large surfaces (the
+     ceiling — nothing transitions longer except measured meters on
+     --motion-duration-slow). Distances cap transform travel. */
+  --motion-duration-fast: 120ms;
+  --motion-duration-base: 190ms;
+  --motion-duration-deliberate: 240ms;
+  --motion-duration-slow: 500ms;
+  --motion-ease-out: cubic-bezier(0, 0, 0.2, 1);
+  --motion-ease-in-out: cubic-bezier(0.4, 0, 0.2, 1);
+  --motion-distance-sm: 4px;
+  --motion-distance-md: 8px;
+}
+
+.wco {
+  --workspace-topbar-height: env(titlebar-area-height, 52px);
+  --workspace-controls-top: env(titlebar-area-y, 0px);
+  --workspace-controls-left: calc(env(titlebar-area-x, 0px) + 0.75rem);
+  --workspace-controls-right: calc(
+    100vw - env(titlebar-area-width, 100vw) - env(titlebar-area-x, 0px) + 0.75rem
+  );
+  --workspace-native-controls-inset: calc(
+    100vw - env(titlebar-area-width, 100vw) - env(titlebar-area-x, 0px) + 0.75rem
+  );
+}
+
+:root {
+  color-scheme: light;
+  --radius: 0.625rem;
+
+  /* Neutral surfaces (pure neutral, zero chroma) */
+  --background: #ffffff;
+  --app-chrome-background: var(--background);
+  --foreground: oklch(0.269 0 0);
+  --card: #ffffff;
+  --card-foreground: oklch(0.269 0 0);
+  --popover: #ffffff;
+  --popover-foreground: oklch(0.269 0 0);
+  --secondary: rgb(0 0 0 / 4%);
+  --secondary-foreground: oklch(0.269 0 0);
+  --muted: rgb(0 0 0 / 4%);
+  --muted-foreground: oklch(0.52 0 0);
+  --accent: rgb(0 0 0 / 4%);
+  --accent-foreground: oklch(0.269 0 0);
+  --border: rgb(0 0 0 / 8%);
+  --input: rgb(0 0 0 / 10%);
+
+  /* Brand and action tiers. --brand is Pi Pink, identity-only (the mark's
+     connector, selected brand moments); --primary is the interactive accent
+     action tier (AA against its foreground); --accent-text is the accent
+     body-copy tier. Interactive accent values re-theme per [data-accent]
+     preset below; Pi Pink is the default. --brand never changes with the
+     accent preference. */
+  --brand: #e83174;
+  --primary: oklch(0.52 0.185 5);
+  --primary-foreground: #ffffff;
+  --accent-text: oklch(0.52 0.185 5);
+  --ring: var(--primary);
+  --accent-soft: color-mix(in srgb, var(--primary) 10%, transparent);
+  --selection: color-mix(in srgb, var(--primary) 22%, transparent);
+
+  /* Semantic hues (never the brand pink) */
+  --destructive: oklch(0.637 0.237 25.331);
+  --destructive-foreground: oklch(0.505 0.213 27.518);
+  --destructive-solid-foreground: #ffffff;
+  --info: oklch(0.623 0.214 259.815);
+  --info-foreground: oklch(0.488 0.243 264.376);
+  --success: oklch(0.696 0.17 162.48);
+  --success-foreground: oklch(0.508 0.118 165.612);
+  --warning: oklch(0.769 0.188 70.08);
+  --warning-foreground: oklch(0.555 0.163 48.998);
+
+  /* Session status taxonomy (T3 pill hues; brand/accent banned here).
+     `-dot` fills the indicator, plain token colors the text. */
+  --status-working-dot: oklch(0.685 0.169 237.323);
+  --status-working: oklch(0.588 0.158 241.966);
+  --status-approval-dot: oklch(0.769 0.188 70.08);
+  --status-approval: oklch(0.666 0.179 58.318);
+  --status-input-dot: oklch(0.585 0.233 277.117);
+  --status-input: oklch(0.511 0.262 276.966);
+  --status-plan-dot: oklch(0.606 0.25 292.717);
+  --status-plan: oklch(0.541 0.281 293.009);
+  --status-done-dot: oklch(0.696 0.17 162.48);
+  --status-done: oklch(0.596 0.145 163.225);
+  --status-error-dot: oklch(0.637 0.237 25.331);
+  --status-error: oklch(0.577 0.245 27.325);
+
+  /* Depth: hairline top-edge bevel used by raised surfaces. */
+  --surface-edge-shadow: 0 1px rgb(0 0 0 / 4%);
+  --bevel-highlight: rgb(255 255 255 / 16%);
+  --bevel-pressed: rgb(0 0 0 / 8%);
+  --skeleton-highlight: rgb(255 255 255 / 64%);
+
+  /* Panels / transcript / composer / overlay */
+  --panel-background: var(--card);
+  --panel-border: var(--border);
+  --panel-tab-height: 36px;
+  --transcript-measure: 48rem;
+  --transcript-background: var(--background);
+  --composer-background: color-mix(in srgb, var(--popover) 92%, transparent);
+  --composer-border: var(--border);
+  --composer-blur: 12px;
+  --composer-shadow: 0 8px 24px rgb(0 0 0 / 8%);
+  --overlay-backdrop: color-mix(in srgb, var(--background) 60%, transparent);
+  --overlay-shadow: 0 16px 40px rgb(0 0 0 / 10%);
+
+  /* Diff / review */
+  --diff-added-background: oklch(0.696 0.17 162.48 / 0.12);
+  --diff-removed-background: oklch(0.637 0.237 25.331 / 0.12);
+  --diff-panel-background: color-mix(in srgb, var(--background) 94%, var(--card));
+  --diff-card-background: color-mix(in srgb, var(--card) 92%, var(--background));
+
+  /* Markdown */
+  --markdown-code-background: var(--muted);
+  --markdown-codeblock-background: color-mix(in srgb, var(--muted) 78%, var(--background));
+  --markdown-rule: color-mix(in srgb, var(--border) 60%, transparent);
+  --markdown-link: var(--info-foreground);
+
+  /* Scrollbars */
+  --scrollbar-thumb: rgb(0 0 0 / 15%);
+  --scrollbar-thumb-hover: rgb(0 0 0 / 25%);
+
+  /* OMP mark connector pin ink (matches assets/omp-mark.svg) */
+  --mark-pin: #0d0d0d;
+
+  /* Terminal (xterm) — T3 light palette, background/foreground bound to app tokens */
+  --terminal-background: var(--background);
+  --terminal-foreground: var(--foreground);
+  --terminal-cursor: rgb(38, 56, 78);
+  --terminal-selection: rgba(37, 63, 99, 0.2);
+  --terminal-scrollbar: rgba(0, 0, 0, 0.15);
+  --terminal-scrollbar-hover: rgba(0, 0, 0, 0.25);
+  --terminal-scrollbar-active: rgba(0, 0, 0, 0.3);
+  --terminal-ansi-black: rgb(44, 53, 66);
+  --terminal-ansi-red: rgb(191, 70, 87);
+  --terminal-ansi-green: rgb(60, 126, 86);
+  --terminal-ansi-yellow: rgb(146, 112, 35);
+  --terminal-ansi-blue: rgb(72, 102, 163);
+  --terminal-ansi-magenta: rgb(132, 86, 149);
+  --terminal-ansi-cyan: rgb(53, 127, 141);
+  --terminal-ansi-white: rgb(210, 215, 223);
+  --terminal-ansi-bright-black: rgb(112, 123, 140);
+  --terminal-ansi-bright-red: rgb(212, 95, 112);
+  --terminal-ansi-bright-green: rgb(85, 148, 111);
+  --terminal-ansi-bright-yellow: rgb(173, 133, 45);
+  --terminal-ansi-bright-blue: rgb(91, 124, 194);
+  --terminal-ansi-bright-magenta: rgb(158, 111, 176);
+  --terminal-ansi-bright-cyan: rgb(74, 158, 173);
+  --terminal-ansi-bright-white: rgb(28, 33, 41);
+}
+
+.dark {
+  color-scheme: dark;
+
+  --background: color-mix(in srgb, oklch(0.145 0 0) 95%, #ffffff);
+  --app-chrome-background: var(--background);
+  --foreground: oklch(0.97 0 0);
+  --card: color-mix(in srgb, var(--background) 98%, #ffffff);
+  --card-foreground: oklch(0.97 0 0);
+  --popover: color-mix(in srgb, var(--background) 98%, #ffffff);
+  --popover-foreground: oklch(0.97 0 0);
+  --secondary: rgb(255 255 255 / 4%);
+  --secondary-foreground: oklch(0.97 0 0);
+  --muted: rgb(255 255 255 / 4%);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: rgb(255 255 255 / 4%);
+  --accent-foreground: oklch(0.97 0 0);
+  --border: rgb(255 255 255 / 6%);
+  --input: rgb(255 255 255 / 8%);
+
+  --brand: #e83174;
+  --primary: oklch(0.72 0.165 4);
+  --primary-foreground: oklch(0.145 0 0);
+  --accent-text: oklch(0.78 0.13 4);
+  --ring: var(--primary);
+  --accent-soft: color-mix(in srgb, var(--primary) 16%, transparent);
+  --selection: color-mix(in srgb, var(--primary) 32%, transparent);
+
+  --destructive: color-mix(in srgb, oklch(0.637 0.237 25.331) 90%, #ffffff);
+  --destructive-foreground: oklch(0.704 0.191 22.216);
+  --destructive-solid-foreground: #ffffff;
+  --info: oklch(0.623 0.214 259.815);
+  --info-foreground: oklch(0.707 0.165 254.624);
+  --success: oklch(0.696 0.17 162.48);
+  --success-foreground: oklch(0.765 0.177 163.223);
+  --warning: oklch(0.769 0.188 70.08);
+  --warning-foreground: oklch(0.828 0.189 84.429);
+
+  --status-working-dot: oklch(0.828 0.111 230.318 / 0.8);
+  --status-working: oklch(0.828 0.111 230.318 / 0.8);
+  --status-approval-dot: oklch(0.879 0.169 91.605 / 0.9);
+  --status-approval: oklch(0.879 0.169 91.605 / 0.9);
+  --status-input-dot: oklch(0.785 0.115 274.713 / 0.9);
+  --status-input: oklch(0.785 0.115 274.713 / 0.9);
+  --status-plan-dot: oklch(0.811 0.111 293.571 / 0.9);
+  --status-plan: oklch(0.811 0.111 293.571 / 0.9);
+  --status-done-dot: oklch(0.845 0.143 164.978 / 0.9);
+  --status-done: oklch(0.845 0.143 164.978 / 0.9);
+  --status-error-dot: oklch(0.808 0.114 19.571 / 0.9);
+  --status-error: oklch(0.808 0.114 19.571 / 0.9);
+
+  --surface-edge-shadow: 0 -1px rgb(255 255 255 / 6%);
+  --skeleton-highlight: rgb(255 255 255 / 4%);
+  --composer-shadow: 0 8px 24px rgb(0 0 0 / 40%);
+  --overlay-shadow: 0 16px 40px rgb(0 0 0 / 50%);
+
+  --scrollbar-thumb: rgb(255 255 255 / 10%);
+  --scrollbar-thumb-hover: rgb(255 255 255 / 18%);
+
+  --terminal-cursor: rgb(180, 203, 255);
+  --terminal-selection: rgba(180, 203, 255, 0.25);
+  --terminal-scrollbar: rgba(255, 255, 255, 0.1);
+  --terminal-scrollbar-hover: rgba(255, 255, 255, 0.18);
+  --terminal-scrollbar-active: rgba(255, 255, 255, 0.22);
+  --terminal-ansi-black: rgb(24, 30, 38);
+  --terminal-ansi-red: rgb(255, 122, 142);
+  --terminal-ansi-green: rgb(134, 231, 149);
+  --terminal-ansi-yellow: rgb(244, 205, 114);
+  --terminal-ansi-blue: rgb(137, 190, 255);
+  --terminal-ansi-magenta: rgb(208, 176, 255);
+  --terminal-ansi-cyan: rgb(124, 232, 237);
+  --terminal-ansi-white: rgb(210, 218, 230);
+  --terminal-ansi-bright-black: rgb(110, 120, 136);
+  --terminal-ansi-bright-red: rgb(255, 168, 180);
+  --terminal-ansi-bright-green: rgb(176, 245, 186);
+  --terminal-ansi-bright-yellow: rgb(255, 224, 149);
+  --terminal-ansi-bright-blue: rgb(174, 210, 255);
+  --terminal-ansi-bright-magenta: rgb(229, 203, 255);
+  --terminal-ansi-bright-cyan: rgb(167, 244, 247);
+  --terminal-ansi-bright-white: rgb(244, 247, 252);
+}
+
+/*
+ * Interactive accent presets. The app writes `data-accent` on <html> before
+ * first paint (strict allowlist, localStorage app preference); any element
+ * may also carry `data-accent` to preview a preset locally (settings
+ * swatches). Every preset ships AA-tested pairs: light primary ≥ 4.5:1
+ * against #ffffff foreground and ≥ 3:1 against the light background; dark
+ * primary ≥ 4.5:1 against its near-black foreground and ≥ 3:1 against the
+ * dark background; accent-text ≥ 4.5:1 against its theme background.
+ * Pi Pink is the default and matches the :root values above.
+ */
+[data-accent="pi-pink"] {
+  --primary: oklch(0.52 0.185 5);
+  --primary-foreground: #ffffff;
+  --accent-text: oklch(0.52 0.185 5);
+}
+
+[data-accent="magenta"] {
+  --primary: oklch(0.5 0.21 330);
+  --primary-foreground: #ffffff;
+  --accent-text: oklch(0.5 0.21 330);
+}
+
+[data-accent="violet"] {
+  --primary: oklch(0.5 0.19 295);
+  --primary-foreground: #ffffff;
+  --accent-text: oklch(0.5 0.19 295);
+}
+
+[data-accent="cobalt"] {
+  --primary: oklch(0.5 0.17 262);
+  --primary-foreground: #ffffff;
+  --accent-text: oklch(0.5 0.17 262);
+}
+
+[data-accent="teal"] {
+  --primary: oklch(0.5 0.078 185);
+  --primary-foreground: #ffffff;
+  --accent-text: oklch(0.5 0.078 185);
+}
+
+[data-accent="mono"] {
+  --primary: oklch(0.35 0 0);
+  --primary-foreground: #ffffff;
+  --accent-text: oklch(0.4 0 0);
+}
+
+.dark[data-accent="pi-pink"],
+.dark [data-accent="pi-pink"] {
+  --primary: oklch(0.72 0.165 4);
+  --primary-foreground: oklch(0.145 0 0);
+  --accent-text: oklch(0.78 0.13 4);
+}
+
+.dark[data-accent="magenta"],
+.dark [data-accent="magenta"] {
+  --primary: oklch(0.73 0.19 330);
+  --primary-foreground: oklch(0.145 0 0);
+  --accent-text: oklch(0.79 0.15 330);
+}
+
+.dark[data-accent="violet"],
+.dark [data-accent="violet"] {
+  --primary: oklch(0.73 0.14 295);
+  --primary-foreground: oklch(0.145 0 0);
+  --accent-text: oklch(0.79 0.11 295);
+}
+
+.dark[data-accent="cobalt"],
+.dark [data-accent="cobalt"] {
+  --primary: oklch(0.72 0.13 258);
+  --primary-foreground: oklch(0.145 0 0);
+  --accent-text: oklch(0.78 0.1 258);
+}
+
+.dark[data-accent="teal"],
+.dark [data-accent="teal"] {
+  --primary: oklch(0.78 0.115 185);
+  --primary-foreground: oklch(0.145 0 0);
+  --accent-text: oklch(0.8 0.1 185);
+}
+
+.dark[data-accent="mono"],
+.dark [data-accent="mono"] {
+  --primary: oklch(0.85 0 0);
+  --primary-foreground: oklch(0.145 0 0);
+  --accent-text: oklch(0.85 0 0);
+}
+
+/* Text selection carries the accent wash; terminal selection stays on its
+   own --terminal-selection token. */
+::selection {
+  background-color: var(--selection);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent-text: var(--accent-text);
+  --color-accent-soft: var(--accent-soft);
+  --color-brand: var(--brand);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-destructive-solid-foreground: var(--destructive-solid-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-status-working: var(--status-working);
+  --color-status-working-dot: var(--status-working-dot);
+  --color-status-approval: var(--status-approval);
+  --color-status-approval-dot: var(--status-approval-dot);
+  --color-status-input: var(--status-input);
+  --color-status-input-dot: var(--status-input-dot);
+  --color-status-plan: var(--status-plan);
+  --color-status-plan-dot: var(--status-plan-dot);
+  --color-status-done: var(--status-done);
+  --color-status-done-dot: var(--status-done-dot);
+  --color-status-error: var(--status-error);
+  --color-status-error-dot: var(--status-error-dot);
+  --color-mark-pin: var(--mark-pin);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 6px);
+
+  --font-sans:
+    "DM Sans Variable", -apple-system, "Segoe UI", system-ui, sans-serif;
+  --font-heading:
+    "DM Sans Variable", -apple-system, "Segoe UI", system-ui, sans-serif;
+  --font-mono:
+    "JetBrains Mono Variable", "JetBrains Mono", "SF Mono", "SFMono-Regular",
+    Consolas, "Liberation Mono", Menlo, monospace;
+
+  --animate-skeleton: skeleton 2s ease-in-out infinite;
+  @keyframes skeleton {
+    from {
+      background-position-x: 200%;
+    }
+    to {
+      background-position-x: 0%;
+    }
+  }
+}
+
+/* Scrollbar styling (T3 parity: 6px, 3px-radius thumb, transparent track) */
+::-webkit-scrollbar {
+  width: var(--app-scrollbar-width);
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+/* Theme flips and panel drags suppress every transition. */
+.no-transitions,
+.no-transitions * {
+  transition: none !important;
+}
+
+/* System reduced-motion preference: zero out motion tokens. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-duration-fast: 0ms;
+    --motion-duration-base: 0ms;
+    --motion-duration-deliberate: 0ms;
+    --motion-duration-slow: 0ms;
+  }
+}
+
+/* Forced reduced-motion (gallery variants, tests): same effect, scoped. */
+.force-reduced-motion {
+  --motion-duration-fast: 0ms;
+  --motion-duration-base: 0ms;
+  --motion-duration-deliberate: 0ms;
+  --motion-duration-slow: 0ms;
+}
+
+.force-reduced-motion,
+.force-reduced-motion * {
+  animation: none !important;
+  transition: none !important;
+}

@@ -1,0 +1,230 @@
+/*
+ * App-level styles for the T4 Code shell. No raw color values here:
+ * packages/ui/src/tokens.css owns every color; this file only consumes
+ * tokens and defines shell geometry.
+ *
+ * Window chrome classes (.drag-region, .workspace-topbar,
+ * .surface-subheader) adapted from T3 Code apps/web/src/index.css (MIT,
+ * T3 Tools Inc., commit f61fa9499d96fee825492aba204593c37b27e0cb). The T3
+ * body noise overlay is intentionally absent.
+ */
+@import "tailwindcss";
+@import "@t4-code/ui/tokens.css";
+@import "@fontsource-variable/dm-sans";
+@import "@fontsource/jetbrains-mono";
+
+@source "../../../packages/ui/src";
+
+@layer base {
+  html,
+  body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overscroll-behavior: none;
+  }
+
+  body {
+    @apply bg-background font-sans text-foreground text-sm;
+    overflow: hidden;
+  }
+
+  #root {
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+  }
+}
+
+@layer components {
+  /* Frameless-window drag region: inert titlebar zones drag the window;
+	   every interactive control inside opts back out. */
+  .drag-region {
+    -webkit-app-region: drag;
+  }
+
+  .drag-region button,
+  .drag-region input,
+  .drag-region textarea,
+  .drag-region select,
+  .drag-region a,
+  .drag-region [role="separator"] {
+    -webkit-app-region: no-drag;
+  }
+
+  .no-drag {
+    -webkit-app-region: no-drag;
+  }
+
+  .workspace-topbar {
+    display: flex;
+    height: var(--workspace-topbar-height);
+    min-height: var(--workspace-topbar-height);
+    flex-shrink: 0;
+    align-items: center;
+  }
+
+  .surface-subheader {
+    @apply flex h-10 min-h-10 shrink-0 items-center border-border/60 border-b bg-background;
+  }
+
+  /* macOS traffic lights live at the top-left of the frameless window.
+	   Reserve their inset; the desktop shell owns the real controls. */
+  [data-platform="darwin"] .titlebar-traffic-light-inset {
+    padding-left: 76px;
+  }
+
+  /* Linux window controls are injected by the desktop shell at the top
+	   right later; keep a modest reserve so nothing crowds that corner. */
+  [data-platform="linux"] .titlebar-window-controls-reserve {
+    padding-right: 8px;
+  }
+}
+
+@layer components {
+  /* Session switch: deliberately instant. The old translate/opacity
+     entrance made transcript text visibly slide/flicker into place on both
+     hard reloads and in-app A→B switches. Session content now hard-switches
+     fully opaque at its final coordinates; motion stays with local control
+     micro-interactions (chevrons, drawers, panes) only. */
+
+  /* Docked right pane: measured width tween (target is the persisted pane
+     width, so no unmeasured layout animation) with a content fade. The
+     flexible center column reflows with it — that IS the compensation.
+     Resize drags add .no-transitions on <html>, which wins over this. */
+  .pane-dock {
+    overflow: hidden;
+    transition:
+      width var(--motion-duration-deliberate) var(--motion-ease-in-out),
+      opacity var(--motion-duration-deliberate) var(--motion-ease-in-out);
+  }
+
+  @starting-style {
+    .pane-dock {
+      width: 0 !important;
+      opacity: 0;
+    }
+  }
+
+  /* Pane family switch while the pane stays open: incoming body slides in. */
+  .pane-content-enter {
+    animation: pane-content-enter var(--motion-duration-fast) var(--motion-ease-out) both;
+  }
+
+  @keyframes pane-content-enter {
+    from {
+      opacity: 0;
+      transform: translateX(var(--motion-distance-sm));
+    }
+  }
+}
+
+@layer components {
+  /* Disclosure bodies (reasoning / tool calls / unknown entries): height is
+     animated by AnimatedHeight (measured, token-bound); the incoming content
+     fades and settles 4px. Reduced motion zeroes both. */
+  .disclosure-content-enter {
+    animation: disclosure-content-enter var(--motion-duration-base) var(--motion-ease-out) both;
+  }
+
+  @keyframes disclosure-content-enter {
+    from {
+      opacity: 0;
+      transform: translateY(calc(-1 * var(--motion-distance-sm)));
+    }
+  }
+
+  /* Terminal drawer: transform/opacity entry only — the PTY viewport must
+     never resize through an animation, and exit stays instant by design. */
+  .drawer-enter {
+    animation: drawer-enter var(--motion-duration-base) var(--motion-ease-out) both;
+  }
+
+  @keyframes drawer-enter {
+    from {
+      opacity: 0;
+      transform: translateY(var(--motion-distance-md));
+    }
+  }
+}
+
+@layer components {
+  /* Rail collapse/expand keeps the measured width tween; rail/session text
+     mounts at its final opacity with no entrance animation. */
+  .rail-dock {
+    transition: width var(--motion-duration-base) var(--motion-ease-in-out);
+  }
+
+  /* Terminal drawer close: content fades/settles 4px for a fast beat, then
+     the drawer unmounts and the height snaps exactly once (the PTY sees a
+     single resize). Opening uses drawer-enter above. */
+  .drawer-exit {
+    animation: drawer-exit var(--motion-duration-fast) var(--motion-ease-out) both;
+  }
+
+  @keyframes drawer-exit {
+    to {
+      opacity: 0;
+      transform: translateY(var(--motion-distance-sm));
+    }
+  }
+
+  /* Theme toggle acknowledgment: the surface flip itself stays instant
+     (.no-transitions suppresses transitions, not this animation) — the
+     clicked icon rotates/fades in so the action reads. */
+  .theme-icon-enter {
+    animation: theme-icon-enter var(--motion-duration-fast) var(--motion-ease-out) both;
+  }
+
+  @keyframes theme-icon-enter {
+    from {
+      opacity: 0;
+      transform: rotate(-45deg) scale(0.9);
+    }
+  }
+}
+
+/* Cross-document navigation keeps the complete old page above the new page
+   until readiness skips the transition, with a bounded discrete fallback. */
+@view-transition {
+  navigation: auto;
+}
+
+::view-transition-group(root) {
+  animation-duration: 56ms !important;
+}
+
+html[data-session-reveal]::view-transition-group(root) {
+  animation-duration: 500ms !important;
+}
+
+html[data-session-reveal]::view-transition-old(root) {
+  animation: root-old-hold 500ms steps(1, end) both !important;
+}
+
+::view-transition-old(root) {
+  animation: root-old-hold 56ms steps(1, end) both !important;
+  z-index: 2 !important;
+  mix-blend-mode: normal !important;
+}
+
+html[data-session-reveal]::view-transition-old(root) {
+  animation: root-old-hold 500ms steps(1, end) both !important;
+}
+
+::view-transition-new(root) {
+  animation: none !important;
+  z-index: 1 !important;
+  mix-blend-mode: normal !important;
+}
+
+@keyframes root-old-hold {
+  from,
+  99.99% {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}

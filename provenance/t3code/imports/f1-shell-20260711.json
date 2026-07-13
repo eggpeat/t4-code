@@ -1,0 +1,57 @@
+{
+  "batch": "f1-shell-20260711",
+  "sourceCommit": "f61fa9499d96fee825492aba204593c37b27e0cb",
+  "adaptationCommit": "e2cbc2230d43a2be1baf1b73d9049611b19f85fb",
+  "license": "MIT; T3 Tools Inc. 2026; licenses/T3-CODE-MIT.txt",
+  "records": [
+    {
+      "sourcePath": "apps/web/src/uiStateStore.ts;apps/web/src/rightPanelStore.ts",
+      "sourceBlobSha": "4a97f0542b4c95e96eae835a8d01db56e7156f1a;70d163306cca5b32d32319359c8ecc9a68c3dbf8",
+      "targetPath": "apps/web/src/state/workspace-store.ts",
+      "classification": "adapted",
+      "checksum": "sha256:c11c214137af87e64e4337b1a9e9982d3f96fda0a3e41d00fdcb28e09eca7510"
+    },
+    {
+      "sourcePath": "apps/web/src/hooks/useTheme.ts",
+      "sourceBlobSha": "bdaf37f099d2057cdfffd27d7ef45a3ec62e56ef",
+      "targetPath": "apps/web/src/theme/theme.ts",
+      "classification": "adapted",
+      "checksum": "sha256:e826993a213f518c3bd1618a00f674ced058c4c923af98b71ad9662f176953b2"
+    },
+    {
+      "sourcePath": "apps/web/src/hooks/useMediaQuery.ts",
+      "sourceBlobSha": "e7e007b0b7c6d73d585c1332e4db28c09a98102b",
+      "targetPath": "apps/web/src/hooks/useMediaQuery.ts",
+      "classification": "adapted",
+      "checksum": "sha256:b93836ec26eb6e25063ca35680e602e0b7852d2aee8d132421fd57ea7e998962"
+    },
+    {
+      "sourcePath": "apps/web/src/index.css",
+      "sourceBlobSha": "3ae42a3e61cac54e9fe75cb58a67313241989ec9",
+      "targetPath": "apps/web/src/app.css",
+      "classification": "adapted",
+      "checksum": "sha256:67a8237be7c015f791e04db971a5ed9845cf36469dc21c1ec51b30ad2ad85f18"
+    },
+    {
+      "sourcePath": "apps/web/src/hooks/useResizableWidth.ts",
+      "sourceBlobSha": "08c067471f74f0d60dc297effa703b927c183890",
+      "targetPath": "apps/web/src/components/ResizeHandle.tsx",
+      "classification": "adapted",
+      "checksum": "sha256:f00570385d0ad62b328a5cf9a3c375f4e5878b7966b8b74ac5982e58718e5faa"
+    },
+    {
+      "sourcePath": "apps/web/src/keybindings.ts",
+      "sourceBlobSha": "9d6109a7780654557d165d9b2bd9a6246573b2f1",
+      "targetPath": "apps/web/src/keyboard/shortcuts.ts",
+      "classification": "reference-only",
+      "checksum": "sha256:09febf119f383753d1e414a03f7b6e4d9bc0489a0245c51b6c65e2c4f63cce70"
+    },
+    {
+      "sourcePath": "apps/web/src/components/Sidebar.logic.ts",
+      "sourceBlobSha": "4e7614ed55161f50f756184251c80cf9dfb16ea2",
+      "targetPath": "apps/web/src/lib/session-tree.ts",
+      "classification": "reference-only",
+      "checksum": "sha256:31ddf85ff789bbbdc5d8092e32e696742c7ea606fa4d159b37c6c194b01b96b8"
+    }
+  ]
+}

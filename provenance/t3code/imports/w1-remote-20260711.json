@@ -1,0 +1,50 @@
+{
+  "batch": "w1-remote-20260711",
+  "sourceCommit": "f61fa9499d96fee825492aba204593c37b27e0cb",
+  "adaptationCommit": "0d35309d0e9d821f4e1e51fcee4d7b0805f9c92d",
+  "license": "MIT; T3 Tools Inc. 2026; licenses/T3-CODE-MIT.txt",
+  "records": [
+    {
+      "sourcePath": "packages/ssh/src/command.ts",
+      "sourceBlobSha": "10927b43089cf880b49b26c54e3760ad4f46089f",
+      "targetPath": "packages/remote/src/process.ts",
+      "classification": "adapted",
+      "checksum": "sha256:784ca029fb2872e2131bbd93f75e970b69707d97164522d79eb43ce70df0ce80"
+    },
+    {
+      "sourcePath": "packages/ssh/src/auth.ts;packages/ssh/src/command.ts",
+      "sourceBlobSha": "ef78b2f24fece5a3393f41ad0c3c99c5a78b8a9e;10927b43089cf880b49b26c54e3760ad4f46089f",
+      "targetPath": "packages/remote/src/ssh.ts",
+      "classification": "adapted",
+      "checksum": "sha256:1ae89bd3c3244bd259b6c42bf57923cda057718d0c4ffa0730769346a0981e99"
+    },
+    {
+      "sourcePath": "packages/tailscale/src/tailscale.ts",
+      "sourceBlobSha": "27761490af0537f4aaba14a4fe64b3cef894c65a",
+      "targetPath": "packages/remote/src/tailscale.ts",
+      "classification": "adapted",
+      "checksum": "sha256:0ed91c8943576006366660e9e377f4f019e34dbd7750459d1d61409a146bccd1"
+    },
+    {
+      "sourcePath": "packages/ssh/src/tunnel.ts",
+      "sourceBlobSha": "016d5e9a854a6eae7aaa73ef0655bb12bbf1ac42",
+      "targetPath": "packages/remote/src/tunnel.ts",
+      "classification": "adapted",
+      "checksum": "sha256:059c57c5ce8d18b2e7aeaa25cbaf8dea06cc02f92a0ac6f750d7ffe4a369dda2"
+    },
+    {
+      "sourcePath": "packages/ssh/src/command.test.ts;packages/ssh/src/tunnel.test.ts;packages/tailscale/src/tailscale.test.ts",
+      "sourceBlobSha": "e5b621f87aa8cdf426493ed1e6e66d1a3f4810f0;7e7a5a542764f1de7e63f83b85cb6d30dc573b68;853bb1f81c2e78128041f338968a62220f5615b3",
+      "targetPath": "packages/remote/test/remote.test.ts",
+      "classification": "adapted",
+      "checksum": "sha256:98c2c0eb33dcc110e4fdfe467c9c87be5f46bedaff33229c7928c5aa18e16eca"
+    },
+    {
+      "sourcePath": "packages/ssh/src/auth.ts;packages/ssh/src/command.ts;packages/ssh/src/tunnel.ts;packages/tailscale/src/tailscale.ts",
+      "sourceBlobSha": "ef78b2f24fece5a3393f41ad0c3c99c5a78b8a9e;10927b43089cf880b49b26c54e3760ad4f46089f;016d5e9a854a6eae7aaa73ef0655bb12bbf1ac42;27761490af0537f4aaba14a4fe64b3cef894c65a",
+      "targetPath": "packages/remote/src/index.ts",
+      "classification": "reference-only",
+      "checksum": "sha256:1ef767a74b9eca823e74752d080a0a56b017ba96be701c363a5070c9bf0dfaf5"
+    }
+  ]
+}

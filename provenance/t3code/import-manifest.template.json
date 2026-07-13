@@ -1,0 +1,10 @@
+{
+  "sourcePath": "path/in/t3code",
+  "sourceBlobSha": "0000000000000000000000000000000000000000",
+  "targetPath": "path/in/desktop",
+  "classification": "adapted",
+  "license": "MIT (T3 Tools Inc., 2026)",
+  "portCommit": "<source-faithful-import-commit>",
+  "adaptationCommit": "<omp-adaptation-commit>",
+  "checksum": "sha256:<target-bytes>"
+}

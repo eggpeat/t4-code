@@ -1,0 +1,36 @@
+{
+  "batch": "f3-panes-20260711",
+  "sourceCommit": "f61fa9499d96fee825492aba204593c37b27e0cb",
+  "adaptationCommit": "23789a42c6146e2e457f535b6295f2657660b295",
+  "license": "MIT; T3 Tools Inc. 2026; licenses/T3-CODE-MIT.txt",
+  "records": [
+    {
+      "sourcePath": "apps/web/src/components/ThreadTerminalDrawer.tsx",
+      "sourceBlobSha": "1641bb6b109b44f2c7b0f2576fcf0750a96da88f",
+      "targetPath": "apps/web/src/features/terminal/TerminalViewport.tsx",
+      "classification": "adapted",
+      "checksum": "sha256:106836945aecde2621f9a40a80ce0a57afd9a322b536ec05acb9dd829ab828bc"
+    },
+    {
+      "sourcePath": "apps/web/src/components/ThreadTerminalDrawer.tsx",
+      "sourceBlobSha": "1641bb6b109b44f2c7b0f2576fcf0750a96da88f",
+      "targetPath": "apps/web/src/features/terminal/terminal-store.ts",
+      "classification": "adapted",
+      "checksum": "sha256:72f2ab3092ab4dc801aa436e7bad4da108482b2435822b2d5b1d734b40dfb263"
+    },
+    {
+      "sourcePath": "apps/web/src/components/ThreadTerminalDrawer.tsx",
+      "sourceBlobSha": "1641bb6b109b44f2c7b0f2576fcf0750a96da88f",
+      "targetPath": "apps/web/src/features/terminal/TerminalDrawer.tsx",
+      "classification": "reference-only",
+      "checksum": "sha256:100ecf2d7eab87a671ebbcec15e442a967e54b105d9c3827b0b311a4f1c9eb0a"
+    },
+    {
+      "sourcePath": "apps/web/src/components/DiffPanel.tsx;apps/web/src/diffPanelStore.ts",
+      "sourceBlobSha": "cbcd36ce05e520c3f7bd298f49fefa67f50f7e0c;c946b286d1b9cc70dd11aff2d7f207fc3aa5160c",
+      "targetPath": "apps/web/src/features/panes/review-model.ts",
+      "classification": "reference-only",
+      "checksum": "sha256:4c28f69279b0ee8905cb7128d7dd46101dfebc392a98f603285cb532de09ee8a"
+    }
+  ]
+}

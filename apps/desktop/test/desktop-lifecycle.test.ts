@@ -1,0 +1,194 @@
+import { describe, expect, it } from "vitest";
+import { chmod, mkdir, mkdtemp, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import type { ProcessRunner, ProcessSpec } from "@t4-code/remote";
+import { parsePairDeepLink, PendingPairQueue } from "../src/deep-link.ts";
+import {
+  createSafeServiceEnvironment,
+  discoverOmpExecutable,
+  NodeServiceRunner,
+} from "../src/service.ts";
+
+describe("desktop lifecycle boundaries", () => {
+  it("adds an issued timestamp without exposing credentials", () => {
+    const link = parsePairDeepLink("t4-code://pair/bunker/123456", 1234);
+    expect(link).toEqual({ hostHint: "bunker", code: "123456", issuedAt: 1234 });
+    expect(JSON.stringify(link).includes("token")).toBe(false);
+  });
+  it("deduplicates newest host and bounds pending links", () => {
+    const queue = new PendingPairQueue(8);
+    for (let index = 0; index < 10; index += 1) queue.push({ hostHint: `host-${index}`, code: "123456", issuedAt: index });
+    queue.push({ hostHint: "host-8", code: "654321", issuedAt: 99 });
+    expect(queue.drain()).toEqual([
+      { hostHint: "host-2", code: "123456", issuedAt: 2 },
+      { hostHint: "host-3", code: "123456", issuedAt: 3 },
+      { hostHint: "host-4", code: "123456", issuedAt: 4 },
+      { hostHint: "host-5", code: "123456", issuedAt: 5 },
+      { hostHint: "host-6", code: "123456", issuedAt: 6 },
+      { hostHint: "host-7", code: "123456", issuedAt: 7 },
+      { hostHint: "host-9", code: "123456", issuedAt: 9 },
+      { hostHint: "host-8", code: "654321", issuedAt: 99 },
+    ]);
+    expect(queue.drain()).toEqual([]);
+  });
+  it("only discovers bounded executable candidates and honors explicit environment", async () => {
+    const executable = await discoverOmpExecutable({ environment: { OMP_EXECUTABLE: "/not/a/real/omp", PATH: "" }, homeDirectory: "/not/a/home" });
+    expect(executable).toBe(undefined);
+  });
+  it("uses explicit executable before PATH and ignores renderer URL as a service candidate", async () => {
+    const root = await mkdtemp(join(tmpdir(), "t4-desktop-"));
+    const explicitDir = join(root, "explicit");
+    const pathDir = join(root, "path");
+    await mkdir(explicitDir);
+    await mkdir(pathDir);
+    const explicit = join(explicitDir, "omp");
+    const pathCandidate = join(pathDir, "omp");
+    await writeFile(explicit, "");
+    await writeFile(pathCandidate, "");
+    await chmod(explicit, 0o755);
+    await chmod(pathCandidate, 0o755);
+    const probeRunner: ProcessRunner = {
+      spawn: async () => ({
+        kill: () => {},
+        result: Promise.resolve({
+          exitCode: 0,
+          signal: null,
+          stdout: JSON.stringify({ state: "stopped", reason: "unreachable" }),
+          stderr: "",
+          stdoutTruncated: false,
+          stderrTruncated: false,
+        }),
+      }),
+    };
+    expect(await discoverOmpExecutable({ environment: { OMP_EXECUTABLE: explicit, PATH: pathDir, OMP_DESKTOP_RENDERER_URL: "http://127.0.0.1:5173/" }, homeDirectory: root, runner: probeRunner })).toBe(explicit);
+    expect(await discoverOmpExecutable({ environment: { PATH: "", OMP_DESKTOP_RENDERER_URL: explicit }, homeDirectory: root, runner: probeRunner })).toBeUndefined();
+  });
+  it("rejects an executable that does not implement appserver status", async () => {
+    const root = await mkdtemp(join(tmpdir(), "t4-desktop-"));
+    const executable = join(root, "omp");
+    await writeFile(executable, "");
+    await chmod(executable, 0o755);
+    const runner: ProcessRunner = {
+      spawn: async () => ({
+        kill: () => {},
+        result: Promise.resolve({ exitCode: 0, signal: null, stdout: "normal agent help", stderr: "", stdoutTruncated: false, stderrTruncated: false }),
+      }),
+    };
+    expect(await discoverOmpExecutable({ environment: { OMP_EXECUTABLE: executable }, homeDirectory: root, runner })).toBeUndefined();
+  });
+  it("rejects malformed, oversized, and timed-out appserver probes", async () => {
+    const root = await mkdtemp(join(tmpdir(), "t4-desktop-"));
+    const executable = join(root, "omp");
+    await writeFile(executable, "");
+    await chmod(executable, 0o755);
+    const malformed: ProcessRunner = {
+      spawn: async () => ({
+        kill: () => {},
+        result: Promise.resolve({ exitCode: 0, signal: null, stdout: "{", stderr: "", stdoutTruncated: false, stderrTruncated: false }),
+      }),
+    };
+    expect(await discoverOmpExecutable({ environment: { OMP_EXECUTABLE: executable }, homeDirectory: root, runner: malformed })).toBeUndefined();
+    const oversized: ProcessRunner = {
+      spawn: async () => ({
+        kill: () => {},
+        result: Promise.resolve({ exitCode: 0, signal: null, stdout: "x".repeat(17 * 1024), stderr: "", stdoutTruncated: false, stderrTruncated: false }),
+      }),
+    };
+    expect(await discoverOmpExecutable({ environment: { OMP_EXECUTABLE: executable }, homeDirectory: root, runner: oversized })).toBeUndefined();
+    const timedOut: ProcessRunner = {
+      spawn: async (_spec, signal) => {
+        const result = Promise.withResolvers<{ exitCode: number | null; signal: null; stdout: string; stderr: string; stdoutTruncated: boolean; stderrTruncated: boolean }>();
+        signal?.addEventListener("abort", () => result.resolve({ exitCode: null, signal: null, stdout: "", stderr: "", stdoutTruncated: false, stderrTruncated: false }), { once: true });
+        return { kill: () => {}, result: result.promise };
+      },
+    };
+    expect(await discoverOmpExecutable({ environment: { OMP_EXECUTABLE: executable }, homeDirectory: root, runner: timedOut, timeoutMs: 10 })).toBeUndefined();
+  });
+  it("does not execute ompd candidates that have no status CLI", async () => {
+    const root = await mkdtemp(join(tmpdir(), "t4-desktop-"));
+    const executable = join(root, "ompd");
+    await writeFile(executable, "");
+    await chmod(executable, 0o755);
+    let calls = 0;
+    const runner: ProcessRunner = {
+      spawn: async () => {
+        calls += 1;
+        return { kill: () => {}, result: Promise.resolve({ exitCode: 0, signal: null, stdout: "{}", stderr: "", stdoutTruncated: false, stderrTruncated: false }) };
+      },
+    };
+    expect(await discoverOmpExecutable({ environment: { OMP_EXECUTABLE: executable }, homeDirectory: root, runner })).toBeUndefined();
+    expect(calls).toBe(0);
+  });
+  it("passes only desktop service environment keys and keeps argv shell-free", async () => {
+    const calls: ProcessSpec[] = [];
+    const runner: ProcessRunner = {
+      spawn: async (spec) => {
+        calls.push(spec);
+        return {
+          kill: () => {},
+          result: Promise.resolve({
+            exitCode: 0,
+            signal: null,
+            stdout: "",
+            stderr: "",
+            stdoutTruncated: false,
+            stderrTruncated: false,
+          }),
+        };
+      },
+    };
+    const environment = {
+      HOME: "/home/test",
+      PATH: "/usr/bin:/bin",
+      XDG_RUNTIME_DIR: "/run/user/1000",
+      DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/1000/bus",
+      TMPDIR: "/tmp/test",
+      OMP_TOKEN: "secret",
+      NODE_OPTIONS: "--require=/tmp/evil.cjs",
+      PROVIDER_API_KEY: "secret",
+      ELECTRON_RUN_AS_NODE: "1",
+      UNRELATED: "discard",
+    };
+
+    await new NodeServiceRunner({ environment, runner }).run([
+      "systemctl",
+      "--user",
+      "start",
+      "t4-code.service",
+    ]);
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toMatchObject({
+      command: "systemctl",
+      args: ["--user", "start", "t4-code.service"],
+    });
+    expect(calls[0]?.env).toEqual({
+      HOME: "/home/test",
+      PATH: "/usr/bin:/bin",
+      XDG_RUNTIME_DIR: "/run/user/1000",
+      DBUS_SESSION_BUS_ADDRESS: "unix:path=/run/user/1000/bus",
+      TMPDIR: "/tmp/test",
+    });
+    expect("shell" in (calls[0] ?? {})).toBe(false);
+    expect(calls[0]?.args?.join(" ")).not.toContain("|");
+    expect(calls[0]?.args?.join(" ")).not.toContain(";");
+  });
+
+  it("omits absent service environment values", () => {
+    expect(
+      createSafeServiceEnvironment({
+        HOME: "/home/test",
+        PATH: undefined,
+        XDG_RUNTIME_DIR: "/run/user/1000",
+        DBUS_SESSION_BUS_ADDRESS: undefined,
+        TMPDIR: "",
+        OMP_PASSWORD: "secret",
+      }),
+    ).toEqual({
+      HOME: "/home/test",
+      XDG_RUNTIME_DIR: "/run/user/1000",
+      TMPDIR: "",
+    });
+  });
+});

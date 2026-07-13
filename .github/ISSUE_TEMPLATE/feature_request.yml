@@ -1,0 +1,27 @@
+name: Feature request
+description: Suggest something T4 Code should do.
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What are you trying to do that the app makes hard or impossible today?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you'd like
+      description: How should it work? Concrete beats abstract.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What you do instead today (optional)
+      description: Workarounds, other tools, or "nothing, I'm stuck."
+  - type: markdown
+    attributes:
+      value: |
+        Note: some features depend on what the OMP host protocol supports. If the runtime can't do it, the right home for the request may be [oh-my-pi](https://github.com/can1357/oh-my-pi).

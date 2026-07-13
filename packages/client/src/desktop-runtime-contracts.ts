@@ -1,0 +1,237 @@
+import type {
+  BootstrapResult,
+  CommandRequest,
+  CommandResult,
+  ConfirmRequest,
+  ConfirmResult,
+  ConnectionStateEvent,
+  ConnectResult,
+  DisconnectResult,
+  DesktopTarget,
+  PairLinkEvent,
+  PairRequest,
+  PairResult,
+  PairLinksDrainResult,
+  RendererServerFrame,
+  RendererServerFrameEvent,
+  RuntimeErrorEvent,
+  ServiceActionResult,
+  ServiceInspection,
+  TargetAddRequest,
+  TargetAddResult,
+  TargetListResult,
+  TargetRemoveResult,
+  TargetRequest,
+  TerminalCloseRequest,
+  TerminalInputRequest,
+  TerminalResizeRequest,
+  TerminalResult,
+} from "@t4-code/protocol/desktop-ipc";
+import type { CatalogFrame, SettingsFrame, WelcomeFrame } from "@t4-code/protocol";
+import { ImmutableMap } from "./immutable-map.ts";
+import type { ProjectionOptions, ProjectionSnapshot, ProjectionStore } from "./projection.ts";
+
+export interface DesktopShellPort {
+  readonly kind: "desktop";
+  readonly platform: "linux" | "darwin";
+  readonly bootstrap: () => Promise<BootstrapResult>;
+  readonly connect: (request: TargetRequest) => Promise<ConnectResult>;
+  readonly disconnect: (request: TargetRequest) => Promise<DisconnectResult>;
+  readonly command: (request: CommandRequest) => Promise<CommandResult>;
+  readonly confirm: (request: ConfirmRequest) => Promise<ConfirmResult>;
+  readonly terminalInput: (request: TerminalInputRequest) => Promise<TerminalResult>;
+  readonly terminalResize: (request: TerminalResizeRequest) => Promise<TerminalResult>;
+  readonly terminalClose: (request: TerminalCloseRequest) => Promise<TerminalResult>;
+  readonly pair: (request: PairRequest) => Promise<PairResult>;
+  readonly drainPairLinks?: () => Promise<PairLinksDrainResult>;
+  readonly serviceInspect?: () => Promise<ServiceInspection>;
+  readonly serviceInstall?: () => Promise<ServiceActionResult>;
+  readonly serviceStart?: () => Promise<ServiceActionResult>;
+  readonly serviceStop?: () => Promise<ServiceActionResult>;
+  readonly serviceRestart?: () => Promise<ServiceActionResult>;
+  readonly serviceUninstall?: () => Promise<ServiceActionResult>;
+  readonly listTargets: () => Promise<TargetListResult>;
+  readonly addTarget: (request: TargetAddRequest) => Promise<TargetAddResult>;
+  readonly removeTarget: (request: TargetRequest) => Promise<TargetRemoveResult>;
+  readonly connectTarget: (request: TargetRequest) => Promise<ConnectResult>;
+  readonly disconnectTarget: (request: TargetRequest) => Promise<DisconnectResult>;
+  readonly onServerFrame: (listener: (event: RendererServerFrameEvent) => void) => () => void;
+  readonly onConnectionState: (listener: (event: ConnectionStateEvent) => void) => () => void;
+  readonly onRuntimeError: (listener: (event: RuntimeErrorEvent) => void) => () => void;
+  readonly onPairLink?: (listener: (event: PairLinkEvent) => void) => () => void;
+}
+
+export type DesktopRuntimeStartState = "idle" | "starting" | "started" | "stopped" | "error";
+
+export interface DesktopHostMetadata {
+  readonly targetId: string;
+  readonly hostId: string;
+  readonly ompVersion: string;
+  readonly ompBuild: string;
+  readonly appserverVersion: string;
+  readonly appserverBuild: string;
+  readonly epoch: string;
+  readonly grantedCapabilities: readonly string[];
+  readonly grantedFeatures: readonly string[];
+  readonly negotiatedLimits: Readonly<Record<string, unknown>>;
+  readonly authentication: WelcomeFrame["authentication"];
+  readonly resumed: boolean;
+}
+
+export interface DesktopRuntimeErrorEntry {
+  readonly targetId?: string;
+  readonly code: RuntimeErrorEvent["code"];
+  readonly message: string;
+  readonly at: number;
+}
+
+export interface DesktopFrameFilter {
+  readonly targetId: string;
+  readonly hostId?: string;
+  readonly sessionId?: string;
+  readonly types?: readonly string[];
+}
+
+export type DesktopFrameSubscription = (event: RendererServerFrameEvent) => void;
+
+export interface DesktopRuntimeSnapshot {
+  readonly version: 1;
+  readonly platform: "linux" | "darwin";
+  readonly desktopVersion: string;
+  readonly startState: DesktopRuntimeStartState;
+  readonly targets: ReadonlyMap<string, DesktopTarget>;
+  readonly connections: ReadonlyMap<string, DesktopTarget["state"]>;
+  readonly targetHosts: ReadonlyMap<string, string>;
+  readonly hosts: ReadonlyMap<string, DesktopHostMetadata>;
+  readonly catalogs: ReadonlyMap<string, CatalogFrame>;
+  readonly settings: ReadonlyMap<string, SettingsFrame>;
+  readonly projection: ProjectionSnapshot;
+  readonly runtimeErrors: readonly DesktopRuntimeErrorEntry[];
+}
+
+export type DesktopRuntimeSnapshotListener = (snapshot: DesktopRuntimeSnapshot) => void;
+
+export interface DesktopRuntimeOptions {
+  readonly shell: DesktopShellPort;
+  readonly projection?: ProjectionStore;
+  readonly projectionOptions?: ProjectionOptions;
+  readonly clock?: { now(): number };
+  readonly maxRuntimeErrors?: number;
+}
+
+export interface DesktopControllerLease {
+  readonly targetId: string;
+  readonly hostId: string;
+  readonly sessionId: string;
+  readonly expectedRevision: string;
+  readonly leaseId: string;
+  readonly ownerId: string;
+  readonly generation: number;
+  readonly acquiredAt: number;
+  readonly expiresAt: number;
+  readonly expiresAtIso?: string;
+  readonly needsRenewal: (now?: number) => boolean;
+}
+
+export type DesktopControllerLeaseAcquireResult =
+  | { readonly required: false }
+  | ({ readonly required: true } & DesktopControllerLease);
+export type DesktopControllerLeaseResult = DesktopControllerLeaseAcquireResult;
+
+export interface DesktopControllerLeaseOperationResult {
+  readonly required: boolean;
+  readonly accepted: boolean;
+  readonly leaseId?: string;
+  readonly released?: boolean;
+  readonly expiresAt?: string;
+  readonly cursor?: string;
+}
+
+export interface DesktopControllerLeaseOptions {
+  readonly ownerId?: string;
+  readonly fallbackTtlMs?: number;
+}
+
+export function freezeClone<T>(value: T, depth = 0): T {
+  if (depth > 8 || value === null || typeof value !== "object") return value;
+  if (Array.isArray(value)) return Object.freeze(value.map((item) => freezeClone(item, depth + 1))) as T;
+  const source = value as unknown as Record<string, unknown>;
+  const output: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(source)) output[key] = freezeClone(item, depth + 1);
+  return Object.freeze(output) as T;
+}
+
+export function mapValue<K, V>(entries: Iterable<readonly [K, V]>): ReadonlyMap<K, V> {
+  return new ImmutableMap(entries);
+}
+
+export function asRecord(value: unknown): Record<string, unknown> | undefined {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return undefined;
+  return value as Record<string, unknown>;
+}
+
+export function frameId(frame: RendererServerFrame, name: "hostId" | "sessionId"): string | undefined {
+  const record = asRecord(frame);
+  const value = record?.[name];
+  return typeof value === "string" ? value : undefined;
+}
+
+export function redactedMessage(message: string): string {
+  const redacted = message
+    .replace(/https?:\/\/[^\s]+/giu, "[redacted]")
+    .replace(/\b(?:token|secret|password|credential|authorization)\s*[:=]\s*[^\s,;]+/giu, "$1=[redacted]")
+    .replace(/(?:^|\s)(?:\/(?:home|tmp|var|etc|opt|srv|mnt|run)\/[^\s,;]*)/gu, " [redacted]");
+  let firstControl = -1;
+  for (let index = 0; index < redacted.length; index += 1) {
+    const code = redacted.charCodeAt(index);
+    if (code <= 0x1f || (code >= 0x7f && code <= 0x9f)) {
+      firstControl = index;
+      break;
+    }
+  }
+  if (firstControl >= 0) {
+    let sanitized = redacted.slice(0, firstControl);
+    for (let index = firstControl; index < redacted.length; index += 1) {
+      const code = redacted.charCodeAt(index);
+      sanitized += code <= 0x1f || (code >= 0x7f && code <= 0x9f) ? " " : redacted[index];
+    }
+    return sanitized.slice(0, 512);
+  }
+  return redacted.slice(0, 512);
+}
+
+export function targetCopy(target: DesktopTarget): DesktopTarget {
+  return freezeClone({
+    ...target,
+    ...(target.mode === undefined ? {} : { mode: target.mode }),
+    ...(target.status === undefined ? {} : { status: target.status }),
+  });
+}
+
+export function hostMetadata(targetId: string, frame: WelcomeFrame): DesktopHostMetadata {
+  return freezeClone({
+    targetId,
+    hostId: String(frame.hostId),
+    ompVersion: frame.ompVersion,
+    ompBuild: frame.ompBuild,
+    appserverVersion: frame.appserverVersion,
+    appserverBuild: frame.appserverBuild,
+    epoch: frame.epoch,
+    grantedCapabilities: [...frame.grantedCapabilities],
+    grantedFeatures: [...frame.grantedFeatures],
+    negotiatedLimits: { ...frame.negotiatedLimits },
+    authentication: frame.authentication,
+    resumed: frame.resumed,
+  });
+}
+
+export class DesktopRuntimeError extends Error {
+  readonly code: "bootstrap" | "protocol" | "stopped" | "command" | "outcome_unknown" | "stale";
+
+  constructor(code: "bootstrap" | "protocol" | "stopped" | "command" | "outcome_unknown" | "stale", message: string) {
+    super(redactedMessage(message));
+    this.name = "DesktopRuntimeError";
+    this.code = code;
+    Object.defineProperty(this, "stack", { configurable: true, enumerable: false, value: undefined, writable: false });
+  }
+}

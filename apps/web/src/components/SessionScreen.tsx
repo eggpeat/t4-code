@@ -1,0 +1,216 @@
+// Active session surface: 40px subheader, resume/empty context frame,
+// closed-by-default right pane (docked aside above 980px, sheet below), and
+// the user terminal drawer affordance. The center body, pane bodies, and
+// drawer live in feature seams (transcript/panes/terminal) for later lanes.
+import {
+  cn,
+  IconButton,
+  ScrollArea,
+  Sheet,
+  SheetPopup,
+  StatusPill,
+  Tooltip,
+  TooltipPopup,
+  TooltipTrigger,
+  useReducedMotion,
+} from "@t4-code/ui";
+import { PanelBottomClose, PanelBottomOpen, X } from "lucide-react";
+import { useEffect, useState } from "react";
+
+import type { WorkspaceProject, WorkspaceSession } from "../lib/workspace-data.ts";
+import { PaneContent } from "../features/panes/PaneContent.tsx";
+import { TerminalDrawer } from "../features/terminal/TerminalDrawer.tsx";
+import { FreshnessBadge, SessionMain } from "../features/transcript/SessionMain.tsx";
+import { RIGHT_PANE_DOCK_QUERY, useMediaQuery } from "../hooks/useMediaQuery.ts";
+import { useWorkspace, workspaceStore } from "../state/store-instance.ts";
+import {
+  RIGHT_PANE_WIDTH,
+  selectSessionView,
+  type SessionViewState,
+} from "../state/workspace-store.ts";
+import { PANE_FAMILY_META } from "./pane-families.tsx";
+import { ResizeHandle } from "./ResizeHandle.tsx";
+
+function FamilyToggles({ sessionId, view }: { sessionId: string; view: SessionViewState }) {
+  return (
+    <div aria-label="Session panels" className="flex items-center gap-0.5" role="group">
+      {PANE_FAMILY_META.map((meta) => {
+        const active = view.paneOpen && view.paneFamily === meta.id;
+        const Icon = meta.icon;
+        return (
+          <Tooltip key={meta.id}>
+            <TooltipTrigger
+              render={
+                <IconButton
+                  aria-label={active ? `Close ${meta.label}` : `Open ${meta.label}`}
+                  aria-pressed={active}
+                  className={cn(active && "bg-secondary text-foreground")}
+                  onClick={() => workspaceStore.getState().togglePaneFamily(sessionId, meta.id)}
+                  size="icon-sm"
+                >
+                  <Icon aria-hidden="true" />
+                </IconButton>
+              }
+            />
+            <TooltipPopup side="bottom">{meta.label}</TooltipPopup>
+          </Tooltip>
+        );
+      })}
+    </div>
+  );
+}
+
+// Session mounts are deliberately instant — no entrance animation on hard
+// reload, deep link, or in-app A→B switches. Content renders fully opaque
+// at its final coordinates on the first frame.
+
+export function SessionScreen({
+  session,
+  project,
+  nowMs,
+}: {
+  session: WorkspaceSession;
+  project: WorkspaceProject;
+  nowMs: number;
+}) {
+  const view = useWorkspace((state) => selectSessionView(state, session.id));
+  const paneDocks = useMediaQuery(RIGHT_PANE_DOCK_QUERY);
+  const [panePreviewWidth, setPanePreviewWidth] = useState<number | null>(null);
+
+  // Transcript scroll ownership lives in TranscriptTimeline (virtualized
+  // scroller: number = reading anchor, null = following the tail). This
+  // wrapper never scrolls and never writes the session scroll key.
+
+  const activeMeta = PANE_FAMILY_META.find((entry) => entry.id === view.paneFamily);
+  const paneWidth = panePreviewWidth ?? view.paneWidth;
+
+  // Docked pane enter/exit: the wrapper's measured width tweens between 0
+  // and the persisted pane width; the pane stays mounted while closing and
+  // unmounts on transition end. Reduced motion unmounts immediately (a 0ms
+  // transition never fires transitionend).
+  const reducedMotion = useReducedMotion();
+  const paneOpen = paneDocks && view.paneOpen && activeMeta !== undefined;
+  const [paneRendered, setPaneRendered] = useState(paneOpen);
+  useEffect(() => {
+    if (paneOpen) setPaneRendered(true);
+    else if (reducedMotion) setPaneRendered(false);
+  }, [paneOpen, reducedMotion]);
+
+  return (
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="surface-subheader gap-2 px-3">
+        <span className="min-w-0 truncate font-medium text-sm">{session.title}</span>
+        <span className="hidden shrink-0 text-muted-foreground text-xs sm:inline">
+          {project.name}
+        </span>
+        <span className="hidden shrink-0 font-mono text-muted-foreground text-xs md:inline">
+          {session.model}
+        </span>
+        {session.status !== null && <StatusPill className="shrink-0" status={session.status} />}
+        <span className="shrink-0">
+          <FreshnessBadge session={session} />
+        </span>
+        <span className="min-w-0 flex-1" />
+        <FamilyToggles sessionId={session.id} view={view} />
+        <span aria-hidden="true" className="mx-1 h-4 w-px bg-border" />
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <IconButton
+                aria-label={
+                  view.terminalDrawerOpen ? "Close terminal drawer" : "Open terminal drawer"
+                }
+                aria-pressed={view.terminalDrawerOpen}
+                onClick={() =>
+                  workspaceStore
+                    .getState()
+                    .setTerminalDrawerOpen(session.id, !view.terminalDrawerOpen)
+                }
+                size="icon-sm"
+              >
+                {view.terminalDrawerOpen ? <PanelBottomClose /> : <PanelBottomOpen />}
+              </IconButton>
+            }
+          />
+          <TooltipPopup side="bottom">
+            {view.terminalDrawerOpen ? "Close terminal drawer" : "Open terminal drawer"}
+          </TooltipPopup>
+        </Tooltip>
+      </div>
+
+      <div className="flex min-h-0 flex-1">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 overflow-hidden">
+            <SessionMain nowMs={nowMs} project={project} session={session} />
+          </div>
+          <TerminalDrawer open={view.terminalDrawerOpen} sessionId={session.id} />
+        </div>
+
+        {paneDocks && paneRendered && activeMeta !== undefined && (
+          <div
+            aria-hidden={paneOpen ? undefined : "true"}
+            className="pane-dock flex min-h-0 shrink-0"
+            onTransitionEnd={(event) => {
+              if (event.target === event.currentTarget && event.propertyName === "width" && !paneOpen) {
+                setPaneRendered(false);
+              }
+            }}
+            style={
+              paneOpen
+                ? { width: `calc(min(${paneWidth}px, 42vw) + 1px)`, opacity: 1 }
+                : { width: 0, opacity: 0 }
+            }
+          >
+            <ResizeHandle
+              bounds={RIGHT_PANE_WIDTH}
+              edge="left"
+              label={`Resize ${activeMeta.label} panel`}
+              onCommit={(width) => workspaceStore.getState().setPaneWidth(session.id, width)}
+              onPreview={setPanePreviewWidth}
+              width={paneWidth}
+            />
+            <aside
+              aria-label={activeMeta.label}
+              className="flex min-h-0 shrink-0 flex-col bg-background"
+              style={{ width: `min(${paneWidth}px, 42vw)` }}
+            >
+              <div className="surface-subheader gap-2 px-3">
+                <span className="font-medium text-xs">{activeMeta.label}</span>
+                <span className="flex-1" />
+                <IconButton
+                  aria-label={`Close ${activeMeta.label}`}
+                  onClick={() => workspaceStore.getState().setPaneOpen(session.id, false)}
+                  size="icon-xs"
+                >
+                  <X />
+                </IconButton>
+              </div>
+              <ScrollArea className="min-h-0 flex-1">
+                <div className="pane-content-enter" key={view.paneFamily}>
+                  <PaneContent family={view.paneFamily} />
+                </div>
+              </ScrollArea>
+              <p className="border-border border-t px-3 py-2 text-muted-foreground text-xs">
+                Esc closes this panel.
+              </p>
+            </aside>
+          </div>
+        )}
+      </div>
+
+      {!paneDocks && activeMeta !== undefined && (
+        <Sheet
+          onOpenChange={(open) => workspaceStore.getState().setPaneOpen(session.id, open)}
+          open={view.paneOpen}
+        >
+          <SheetPopup aria-label={activeMeta.label} side="right">
+            <div className="surface-subheader gap-2 px-3">
+              <span className="font-medium text-xs">{activeMeta.label}</span>
+            </div>
+            <PaneContent family={view.paneFamily} />
+          </SheetPopup>
+        </Sheet>
+      )}
+    </div>
+  );
+}

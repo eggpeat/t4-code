@@ -1,0 +1,41 @@
+{
+  "name": "@t4-code/root",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vp run --parallel --filter @t4-code/web --filter @t4-code/desktop dev",
+    "dev:web": "vp run --filter @t4-code/web dev",
+    "dev:desktop": "vp run --filter @t4-code/desktop dev",
+    "dev:site": "vp run --filter @t4-code/site dev",
+    "build": "vp run -r build",
+    "build:web": "pnpm --filter @t4-code/web build",
+    "build:desktop": "pnpm --filter @t4-code/desktop build",
+    "build:site": "pnpm --filter @t4-code/site build",
+    "deploy:site": "node scripts/deploy-site.mjs",
+    "prepackage": "pnpm check && pnpm build:web && pnpm build:desktop && node scripts/package-preflight.mjs",
+    "package:linux": "pnpm prepackage && node scripts/run-electron-builder.mjs --linux --x64",
+    "package:mac:unsigned": "node scripts/package-mac-unsigned.mjs",
+    "package:dir": "pnpm prepackage && node scripts/run-electron-builder.mjs --linux --x64 --dir",
+    "inspect:package": "node scripts/inspect-package.mjs",
+    "test:packaging": "node --test scripts/packaging.test.mjs",
+    "test:tooling": "node --test scripts/check-structure.test.mjs scripts/check-provenance.test.mjs scripts/deploy-site.test.mjs",
+    "check:structure": "node scripts/check-structure.mjs",
+    "check:provenance": "node scripts/check-provenance.mjs",
+    "lint": "vp lint --deny-warnings",
+    "check": "pnpm check:structure && pnpm check:provenance && pnpm lint && pnpm typecheck",
+    "typecheck": "vp run -r typecheck",
+    "test": "vp run -r test",
+    "test:protocol": "vp run --filter @t4-code/protocol --filter @t4-code/fixture-server test"
+  },
+  "devDependencies": {
+    "@electron/asar": "3.4.1",
+    "@types/node": "catalog:",
+    "@typescript/native-preview": "catalog:",
+    "vite-plus": "catalog:"
+  },
+  "engines": {
+    "node": "^24.13.1"
+  },
+  "packageManager": "pnpm@11.10.0"
+}

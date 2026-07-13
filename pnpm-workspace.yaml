@@ -1,0 +1,41 @@
+packages:
+  - apps/*
+  - packages/*
+
+allowBuilds:
+  electron: true
+  electron-winstaller: false
+  esbuild: true
+  node-pty: true
+
+catalog:
+  "@types/node": 24.12.4
+  "@types/react": ~19.2.14
+  "@types/react-dom": ~19.2.3
+  "@typescript/native-preview": 7.0.0-dev.20260604.1
+  electron: 41.5.0
+  electron-builder: 26.15.6
+  react: 19.2.6
+  react-dom: 19.2.6
+  typescript: ~6.0.3
+  vite: npm:@voidzero-dev/vite-plus-core@0.2.2
+  vite-plus: 0.2.2
+
+overrides:
+  vite: "catalog:"
+
+packageExtensions:
+  vite-plus@*:
+    dependencies:
+      vite: "catalog:"
+
+peerDependencyRules:
+  allowAny:
+    - vite
+  allowedVersions:
+    vite: "*"
+
+supportedArchitectures:
+  cpu: [ current, x64, arm64 ]
+  libc: [ current, glibc ]
+  os: [ current, linux, darwin ]

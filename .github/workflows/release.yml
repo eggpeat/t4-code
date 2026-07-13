@@ -1,0 +1,148 @@
+name: Release desktop builds
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing version tag to publish
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  build-linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 11.10.0
+
+      - name: Install Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.13.1
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Linux packages
+        run: pnpm package:linux
+
+      - name: Stage Linux artifacts
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          cp release/T4-Code-*.deb release/T4-Code-*.AppImage artifacts/
+          (cd artifacts && sha256sum T4-Code-* > SHA256SUMS-linux.txt)
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: linux-release
+          path: artifacts/*
+          if-no-files-found: error
+          retention-days: 7
+
+  build-macos:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 11.10.0
+
+      - name: Install Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24.13.1
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build unsigned macOS packages
+        run: pnpm package:mac:unsigned
+
+      - name: Stage macOS artifacts
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          cp release/T4-Code-*.dmg release/T4-Code-*.zip artifacts/
+          (cd artifacts && shasum -a 256 T4-Code-* > SHA256SUMS-macos.txt)
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: macos-release
+          path: artifacts/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: [build-linux, build-macos]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download built artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: "*-release"
+          path: artifacts
+          merge-multiple: true
+
+      - name: Assemble checksums
+        shell: bash
+        run: cat artifacts/SHA256SUMS-linux.txt artifacts/SHA256SUMS-macos.txt | sort -k2 > artifacts/SHA256SUMS.txt
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          generate_release_notes: true
+          fail_on_unmatched_files: true
+          body: |
+            ## Install notes
+
+            Linux packages are built for x86_64. macOS packages are built for Apple Silicon.
+
+            The macOS build is unsigned and unnotarized. Gatekeeper will block the first launch. After copying T4 Code to Applications, run:
+
+            ```sh
+            xattr -dr com.apple.quarantine "/Applications/T4 Code.app"
+            ```
+
+            Verify downloads with `SHA256SUMS.txt`.
+          files: |
+            artifacts/T4-Code-*.deb
+            artifacts/T4-Code-*.AppImage
+            artifacts/T4-Code-*.dmg
+            artifacts/T4-Code-*.zip
+            artifacts/SHA256SUMS.txt

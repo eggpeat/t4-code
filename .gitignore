@@ -1,0 +1,23 @@
+# Reference repositories are evidence, not vendored source.
+/reference/*/
+/t3code-live.png
+/reference-comparison-hermes-opencode.png
+
+# Local app artifacts
+node_modules/
+target/
+dist/
+dist-electron/
+/release/
+.vite-plus/
+*.tsbuildinfo
+/.worktrees/
+.DS_Store
+.env*
+!.env.example
+
+# Test and runtime output
+coverage/
+playwright-report/
+test-results/
+*.log

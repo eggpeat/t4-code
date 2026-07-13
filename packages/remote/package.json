@@ -1,0 +1,26 @@
+{
+  "name": "@t4-code/remote",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./process": "./src/process.ts",
+    "./tailscale": "./src/tailscale.ts",
+    "./ssh": "./src/ssh.ts",
+    "./tunnel": "./src/tunnel.ts",
+    "./target": "./src/target.ts"
+  },
+  "scripts": {
+    "build": "tsgo --noEmit",
+    "typecheck": "tsgo --noEmit",
+    "test": "vp test run"
+  },
+  "dependencies": {
+    "@t4-code/protocol": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "vite-plus": "catalog:"
+  }
+}

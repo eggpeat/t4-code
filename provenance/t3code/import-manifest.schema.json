@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["sourcePath", "sourceBlobSha", "targetPath", "classification", "license", "portCommit", "adaptationCommit", "checksum"],
+  "properties": {
+    "sourcePath": {"type": "string"}, "sourceBlobSha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "targetPath": {"type": "string"}, "classification": {"enum": ["copied", "adapted", "reference-only"]},
+    "license": {"type": "string"}, "portCommit": {"type": "string"}, "adaptationCommit": {"type": "string"}, "checksum": {"type": "string"}
+  }, "additionalProperties": false
+}

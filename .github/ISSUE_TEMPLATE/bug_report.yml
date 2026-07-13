@@ -1,0 +1,65 @@
+name: Bug report
+description: Something in T4 Code is broken or behaves wrong.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Security problem? **Stop. Do not file a public issue.** Follow [SECURITY.md](https://github.com/LycaonLLC/t4-code/blob/main/SECURITY.md) instead.
+  - type: input
+    id: version
+    attributes:
+      label: T4 Code version
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options:
+        - Linux x86_64 (.deb)
+        - Linux x86_64 (AppImage)
+        - macOS Apple Silicon (.dmg)
+        - macOS Apple Silicon (.zip)
+        - Built from source
+    validations:
+      required: true
+  - type: input
+    id: omp-version
+    attributes:
+      label: OMP version on the host
+      description: Output of `omp --version` on the host you were connected to, if you know it.
+      placeholder: "unknown"
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what actually happened.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open ...
+        2. Click ...
+        3. See ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Redacted logs (optional)
+      description: |
+        Appserver logs live in `~/.local/state/t4-code/appserver` (Linux) or `~/Library/Logs/T4 Code/appserver` (macOS).
+        **Redact before pasting**: remove API keys, tokens, pairing codes, credentials, usernames, home paths, hostnames, and anything private. Trim to the relevant time window.
+      render: text
+  - type: checkboxes
+    id: redaction
+    attributes:
+      label: Redaction check
+      options:
+        - label: I checked this report and any attached logs contain no secrets, tokens, pairing codes, or private paths.
+          required: true

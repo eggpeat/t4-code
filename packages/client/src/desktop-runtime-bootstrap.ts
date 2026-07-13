@@ -1,0 +1,51 @@
+import { decodeSessionListResult, type WelcomeFrame } from "@t4-code/protocol";
+import type { CommandRequest, CommandResult } from "@t4-code/protocol/desktop-ipc";
+
+export type DesktopBootstrapCommand = (
+  intent: CommandRequest["intent"],
+) => CommandResult | undefined | PromiseLike<CommandResult | undefined>;
+export type DesktopBootstrapErrorCode = "transport" | "protocol";
+export type DesktopBootstrapErrorReporter = (error: unknown, code: DesktopBootstrapErrorCode) => void;
+
+export interface DesktopHostBootstrapOptions {
+  readonly targetId: string;
+  readonly frame: WelcomeFrame;
+  readonly issue: DesktopBootstrapCommand;
+  readonly onError?: DesktopBootstrapErrorReporter;
+}
+
+export async function bootstrapDesktopHost(options: DesktopHostBootstrapOptions): Promise<void> {
+  const { frame, issue, onError = () => undefined } = options;
+  const capability = (name: string): boolean => frame.grantedCapabilities.includes(name);
+  const feature = (name: string): boolean => frame.grantedFeatures.includes(name);
+  const host = frame.hostId;
+  const issueSafely = async (intent: CommandRequest["intent"]): Promise<CommandResult | undefined> => {
+    try {
+      return await issue(intent);
+    } catch (error) {
+      onError(error, "transport");
+      return undefined;
+    }
+  };
+
+  let sessionList: CommandResult | undefined;
+  if (capability("sessions.read")) {
+    sessionList = await issueSafely({ hostId: host, command: "session.list", args: {} });
+  }
+  if (sessionList?.accepted === true) {
+    try {
+      const decoded = decodeSessionListResult(sessionList.result);
+      if (feature("host.watch")) {
+        await issueSafely({ hostId: host, command: "host.watch", args: { cursor: decoded.cursor } });
+      }
+    } catch (error) {
+      onError(error, "protocol");
+    }
+  }
+  if (capability("catalog.read") && feature("catalog.metadata")) {
+    await issueSafely({ hostId: host, command: "catalog.get", args: {} });
+  }
+  if (capability("config.read") && feature("settings.metadata")) {
+    await issueSafely({ hostId: host, command: "settings.read", args: {} });
+  }
+}
