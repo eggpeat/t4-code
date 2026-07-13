@@ -2,6 +2,7 @@ import { app, BrowserWindow } from "electron";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import type { CursorStore } from "@t4-code/client";
+import type { ServiceAvailabilityIssue } from "@t4-code/protocol/desktop-ipc";
 import type { ServiceManager } from "@t4-code/service-manager";
 import type { RemoteTargetRegistry } from "./remote-runtime/registry.ts";
 import { createDesktopWindow, type DesktopWindowHandle } from "./window.ts";
@@ -10,7 +11,7 @@ import { ElectronCursorStore, ElectronRemoteTargetStore, ElectronCredentialCiphe
 import { VersionedRemoteTargetRegistry, DeviceCredentialStore } from "./remote-runtime/index.ts";
 import { LocalTargetManager, type TargetManagerOptions } from "./target-manager.ts";
 import { parsePairDeepLink, PendingPairQueue, type PendingPair } from "./deep-link.ts";
-import { createAppserverServiceManager, discoverOmpExecutable, probeOmpAppserver, NodeServiceFileSystem } from "./service.ts";
+import { createAppserverServiceManager, discoverOmpExecutable, OmpAppserverCompatibilityError, probeOmpAppserver, NodeServiceFileSystem } from "./service.ts";
 
 export function appserverLogsDirectory(
   homeDirectory: string,
@@ -40,6 +41,13 @@ export interface DesktopLifecycleOptions {
   readonly createTargetManager?: (options: TargetManagerOptions) => LocalTargetManager;
 }
 
+class ServiceRecoveryCancelledError extends Error {
+  constructor() {
+    super("desktop service recovery was cancelled");
+    this.name = "ServiceRecoveryCancelledError";
+  }
+}
+
 export class DesktopLifecycle {
   private readonly pendingPairs = new PendingPairQueue(8);
   private readonly electronApp: typeof app;
@@ -58,8 +66,11 @@ export class DesktopLifecycle {
   private ipc: DesktopIpcRegistry | undefined;
   private manager: LocalTargetManager | undefined;
   private serviceManager: ServiceManager | undefined;
+  private serviceAvailabilityIssue: ServiceAvailabilityIssue | undefined;
+  private serviceRecoveryPromise: Promise<ServiceManager | undefined> | undefined;
   private rendererLoaded = false;
   private startupPromise: Promise<void> | undefined;
+  private stopPromise: Promise<void> | undefined;
   private startupServiceError: unknown;
   private started = false;
   private stopping = false;
@@ -122,32 +133,8 @@ export class DesktopLifecycle {
     const identity = this.identityFactory();
     const remoteRegistry = this.remoteRegistryFactory();
     const credentials = this.credentialsFactory();
-    let executable: string | undefined;
-    try {
-      executable = await this.executableFactory();
-    } catch (error) {
-      this.startupServiceError = error;
-    }
-    if (executable !== undefined) {
-      try {
-        this.serviceManager = this.serviceFactory({
-          homeDirectory: homedir(),
-          logsDirectory: appserverLogsDirectory(homedir()),
-          executable,
-          argv: executable.endsWith("/ompd") ? [] : ["appserver", "serve"],
-          fs: new NodeServiceFileSystem(),
-        });
-      } catch (error) {
-        this.startupServiceError = error;
-      }
-    }
-    if (this.serviceManager !== undefined) {
-      try {
-        await this.ensureServiceReady(this.serviceManager, executable ?? "");
-      } catch (error) {
-        this.startupServiceError = error;
-      }
-    }
+    await this.acquireServiceManager();
+    if (this.stopping) return;
     this.manager = this.targetManagerFactory({
       cursorStore: this.cursorStoreFactory(),
       registry: remoteRegistry,
@@ -162,9 +149,9 @@ export class DesktopLifecycle {
     });
     this.bindWindow(this.windowFactory());
     this.beforeQuitHandler = () => {
-      if (this.stopping) return;
-      this.stopping = true;
-      void this.manager?.close().catch((error: unknown) => this.ipc?.emitRuntimeError(runtimeError(error, "local")));
+      void this.stop().catch(() => {
+        // Electron is already quitting; teardown remains best effort.
+      });
     };
     this.electronApp.on("before-quit", this.beforeQuitHandler);
     this.electronApp.on("activate", () => {
@@ -173,34 +160,140 @@ export class DesktopLifecycle {
     });
   }
 
-  async stop(): Promise<void> {
-    if (this.stopping) return;
+  stop(): Promise<void> {
+    if (this.stopPromise !== undefined) return this.stopPromise;
+    this.stopPromise = this.stopInternal();
+    return this.stopPromise;
+  }
+  private async stopInternal(): Promise<void> {
     this.stopping = true;
     this.ipc?.uninstall();
     this.ipc = undefined;
     this.mainWindow = undefined;
     const manager = this.manager;
     this.manager = undefined;
-    if (manager !== undefined) await manager.close();
+    const recovery = this.serviceRecoveryPromise;
+    await Promise.all([
+      manager?.close() ?? Promise.resolve(),
+      recovery?.then(() => undefined, () => undefined) ?? Promise.resolve(),
+    ]);
     if (this.beforeQuitHandler !== undefined) this.electronApp.removeListener("before-quit", this.beforeQuitHandler);
     this.beforeQuitHandler = undefined;
   }
   private async ensureServiceReady(manager: ServiceManager, executable: string): Promise<void> {
+    this.assertServiceRecoveryActive();
     let inspection = await manager.inspect();
+    this.assertServiceRecoveryActive();
     if (inspection.definition !== "current") {
       await manager.install();
+      this.assertServiceRecoveryActive();
       inspection = await manager.inspect();
+      this.assertServiceRecoveryActive();
     }
-    if (inspection.service !== "running") await manager.start();
+    if (inspection.service !== "running") {
+      await manager.start();
+      this.assertServiceRecoveryActive();
+    }
     const deadline = Date.now() + 5_000;
     while (true) {
+      this.assertServiceRecoveryActive();
       inspection = await manager.inspect();
-      if (inspection.service === "running" && await this.appserverProbe(executable)) return;
+      this.assertServiceRecoveryActive();
+      const ready = inspection.service === "running" && await this.appserverProbe(executable);
+      this.assertServiceRecoveryActive();
+      if (ready) return;
       if (Date.now() >= deadline) throw new Error(`appserver service did not become ready (${inspection.diagnostics.slice(0, 512)})`);
       const delay = Promise.withResolvers<void>();
       setTimeout(delay.resolve, 100);
       await delay.promise;
     }
+  }
+
+  /**
+   * Discover and prepare the service as one lifecycle-owned transaction.
+   * A constructed manager is retained for explicit inspection/repair even
+   * when automatic startup fails, and all windows/retries share one attempt.
+   */
+  private acquireServiceManager(): Promise<ServiceManager | undefined> {
+    if (this.stopping) return Promise.resolve(undefined);
+    if (this.serviceManager !== undefined) return Promise.resolve(this.serviceManager);
+    if (this.serviceRecoveryPromise !== undefined) return this.serviceRecoveryPromise;
+    const recovery = this.recoverServiceManager();
+    this.serviceRecoveryPromise = recovery;
+    const clearRecovery = (): void => {
+      if (this.serviceRecoveryPromise === recovery) this.serviceRecoveryPromise = undefined;
+    };
+    void recovery.then(clearRecovery, clearRecovery);
+    return recovery;
+  }
+
+  private async recoverServiceManager(): Promise<ServiceManager | undefined> {
+    if (this.stopping) return undefined;
+    let executable: string | undefined;
+    try {
+      executable = await this.executableFactory();
+      this.assertServiceRecoveryActive();
+    } catch (error) {
+      if (this.stopping || error instanceof ServiceRecoveryCancelledError) return undefined;
+      this.recordServiceFailure(error);
+      return undefined;
+    }
+    if (executable === undefined) {
+      this.serviceAvailabilityIssue = {
+        code: "omp_not_found",
+        message: "OMP was not found. Install or update OMP, then choose Check again.",
+      };
+      return undefined;
+    }
+    try {
+      const candidate = this.serviceFactory({
+        homeDirectory: homedir(),
+        logsDirectory: appserverLogsDirectory(homedir()),
+        executable,
+        argv: executable.endsWith("/ompd") ? [] : ["appserver", "serve"],
+        fs: new NodeServiceFileSystem(),
+      });
+      this.assertServiceRecoveryActive();
+      // A healthy appserver may have been launched outside T4 Code. Use it
+      // as-is; service installation/startup is only a cold-start fallback.
+      try {
+        const alreadyReady = await this.appserverProbe(executable).catch(() => false);
+        this.assertServiceRecoveryActive();
+        if (!alreadyReady) await this.ensureServiceReady(candidate, executable);
+      } catch (error) {
+        if (this.stopping || error instanceof ServiceRecoveryCancelledError) return undefined;
+        // Creation succeeded, so keep the manager available for authoritative
+        // inspection and explicit repair actions even if automatic startup did
+        // not finish. The preparation error remains a one-shot runtime event.
+        this.serviceManager = candidate;
+        this.serviceAvailabilityIssue = undefined;
+        this.startupServiceError = error;
+        return candidate;
+      }
+      this.assertServiceRecoveryActive();
+      this.serviceManager = candidate;
+      this.serviceAvailabilityIssue = undefined;
+      this.startupServiceError = undefined;
+      return candidate;
+    } catch (error) {
+      if (this.stopping || error instanceof ServiceRecoveryCancelledError) return undefined;
+      this.recordServiceFailure(error);
+      return undefined;
+    }
+  }
+
+  private assertServiceRecoveryActive(): void {
+    if (this.stopping) throw new ServiceRecoveryCancelledError();
+  }
+
+  private recordServiceFailure(error: unknown): void {
+    this.startupServiceError = error;
+    this.serviceAvailabilityIssue = error instanceof OmpAppserverCompatibilityError
+      ? { code: "omp_incompatible", message: error.message }
+      : {
+          code: "service_unavailable",
+          message: runtimeError(error, "local").message || "The local OMP service is unavailable. Choose Check again to retry.",
+        };
   }
 
   private bindWindow(handle: DesktopWindowHandle): void {
@@ -213,7 +306,9 @@ export class DesktopLifecycle {
       manager,
       window: handle.window,
       trustedRenderer: handle.trustedRenderer,
-      ...(this.serviceManager === undefined ? {} : { serviceManager: this.serviceManager }),
+      getServiceManager: () => this.serviceManager,
+      acquireServiceManager: () => this.acquireServiceManager(),
+      getServiceAvailabilityIssue: () => this.serviceAvailabilityIssue,
       drainPairLinks: () => this.pendingPairs.drain(),
     });
     this.ipc.install();
