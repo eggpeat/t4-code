@@ -12,6 +12,7 @@
 // implicit backend endpoint.
 import {
   createOmpClient,
+  isConfirmationDecisionConsumed,
   type OmpClient,
   type OmpClientOptions,
   type OmpTransport,
@@ -219,7 +220,7 @@ export function createBrowserShellPort(options: BrowserShellPortOptions = {}): D
       },
       client: {
         name: "T4 Code",
-        version: "0.1.0",
+        version: "0.1.1",
         build: "browser",
         platform: platform === "darwin" ? "darwin" : "linux",
       },
@@ -328,7 +329,7 @@ export function createBrowserShellPort(options: BrowserShellPortOptions = {}): D
         requestId: String(result.requestId),
         confirmationId: request.confirmationId,
         commandId: request.commandId,
-        accepted: result.ok,
+        accepted: isConfirmationDecisionConsumed(result),
       };
     },
 
