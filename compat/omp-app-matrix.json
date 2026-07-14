@@ -4,7 +4,7 @@
     "package": "@oh-my-pi/app-wire",
     "version": "0.5.3",
     "sourceRepository": "https://github.com/lyc-aon/oh-my-pi",
-    "sourceCommit": "1ada5fc2f0d6f9026d373cd25e004b974437651e",
+    "sourceCommit": "15527d1f00bac22705f63f80b29c0c30e67fc5da",
     "sourceTreeHash": "4961ea9c522a3bbf9a9900424dd475a48148c729",
     "tarball": "vendor/app-wire/oh-my-pi-app-wire-0.5.3.tgz",
     "tarballSha256": "5ae8833b963a6a56b65a9e2184358906a8717a6c8f57617875a91d4771791050",
@@ -12,14 +12,14 @@
   },
   "verifiedRuntime": {
     "package": "omp",
-    "version": "16.5.0",
+    "version": "16.5.1",
     "sourceRepository": "https://github.com/lyc-aon/oh-my-pi",
-    "sourceCommit": "1ada5fc2f0d6f9026d373cd25e004b974437651e",
-    "sourceUrl": "https://github.com/lyc-aon/oh-my-pi/commit/1ada5fc2f0d6f9026d373cd25e004b974437651e",
-    "sourceTag": "t4code-16.5.0-appserver-4",
+    "sourceCommit": "15527d1f00bac22705f63f80b29c0c30e67fc5da",
+    "sourceUrl": "https://github.com/lyc-aon/oh-my-pi/commit/15527d1f00bac22705f63f80b29c0c30e67fc5da",
+    "sourceTag": "t4code-16.5.1-appserver-1",
     "upstreamRepository": "https://github.com/can1357/oh-my-pi",
-    "upstreamTag": "v16.5.0",
-    "upstreamCommit": "3047c27c332c5629c8e063283d349384c10c9a56",
+    "upstreamTag": "v16.5.1",
+    "upstreamCommit": "14b5da76a9aece9a469288718d22c3d624daf033",
     "integrationPatches": [
       "bounded-growing-session-replay",
       "complete-session-event-projection",
@@ -38,6 +38,6 @@
   },
   "desktop": {
     "package": "@t4-code/protocol",
-    "version": "0.1.10"
+    "version": "0.1.11"
   }
 }

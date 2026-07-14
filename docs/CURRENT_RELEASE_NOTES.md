@@ -1,18 +1,18 @@
-## Prompt delivery
+## OMP 16.5.1 compatibility
 
-Host command errors reach the composer with their code, message, and redacted details. The draft remains in place so you can act on the specific reason.
+T4 Code v0.1.11 adopts the official OMP 16.5.1 release. The host runtime now includes upstream fixes for interrupted session turns, organization-scoped Anthropic accounts, credential rotation, subagent model selection, bounded transcript retention, and RPC disconnect cleanup.
 
-When the host cannot confirm whether a prompt ran, T4 Code asks you to check the transcript before retrying. The retained draft stays ready after that check.
+## Desktop runtime
 
-## Session recovery
-
-Every current session has a **Terminate runtime** action in its menu. After a separate confirmation, T4 Code asks OMP to close the worker, refreshes the authoritative session list, and waits for the session to report closed and idle. Archive and permanent delete can then proceed.
+The merged RPC shutdown path rejects pending extension UI, host tool, and host URI requests before it drains accepted work. T4's session teardown then releases the persistent session lock and flushes the postmortem before the worker exits. This sequence prevents a dead client from leaving queued work or a stale session lock.
 
 ## Runtime compatibility
 
-T4 Code v0.1.10 uses app-wire 0.5.3 from integration commit [1ada5fc2](https://github.com/lyc-aon/oh-my-pi/commit/1ada5fc2f0d6f9026d373cd25e004b974437651e), source tree `4961ea9c522a3bbf9a9900424dd475a48148c729`. The matching OMP 16.5.0 runtime is tagged [t4code-16.5.0-appserver-4](https://github.com/lyc-aon/oh-my-pi/tree/t4code-16.5.0-appserver-4). It keeps terminal events inside protocol limits, reaps a session worker after a reader failure, makes crash-only sessions restartable after the failed child exits, and clears pending work during an explicit close.
+T4 Code v0.1.11 uses app-wire 0.5.3 from integration commit [15527d1f](https://github.com/lyc-aon/oh-my-pi/commit/15527d1f00bac22705f63f80b29c0c30e67fc5da), source tree `4961ea9c522a3bbf9a9900424dd475a48148c729`. The app-wire source tree and packaged artifact are unchanged from v0.1.10; provenance now points at the OMP 16.5.1 integration.
 
-The integration remains based on the official upstream [v16.5.0 tag](https://github.com/can1357/oh-my-pi/tree/v16.5.0), commit [3047c27c](https://github.com/can1357/oh-my-pi/commit/3047c27c332c5629c8e063283d349384c10c9a56). Official upstream OMP v16.5.0 has no `appserver` command and cannot host T4 Code.
+The matching OMP 16.5.1 runtime is tagged [t4code-16.5.1-appserver-1](https://github.com/lyc-aon/oh-my-pi/tree/t4code-16.5.1-appserver-1). It carries forward bounded replay and terminal events, complete session projection, catalog-backed lifecycle controls, ordered remote delivery, failed-worker reaping, recoverable crash state, settled close state, cross-client convergence, and restart-safe RPC teardown.
+
+The integration is based on the official upstream [v16.5.1 tag](https://github.com/can1357/oh-my-pi/tree/v16.5.1), commit [14b5da76](https://github.com/can1357/oh-my-pi/commit/14b5da76a9aece9a469288718d22c3d624daf033). Official upstream OMP v16.5.1 has no `appserver` command and cannot host T4 Code.
 
 ## Packages
 

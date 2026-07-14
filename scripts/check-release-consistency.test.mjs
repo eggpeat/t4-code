@@ -17,28 +17,28 @@ function changed(path, replace) {
 }
 
 test("current source tree has one consistent release version", () => {
-  assert.deepEqual(collectReleaseConsistencyErrors(files, "v0.1.10"), []);
+  assert.deepEqual(collectReleaseConsistencyErrors(files, "v0.1.11"), []);
 });
 
 test("rejects a tag that differs from the package version", () => {
   assert.ok(
     collectReleaseConsistencyErrors(files, "v9.9.9").some((error) =>
-      error.includes("release tag v9.9.9 does not match v0.1.10"),
+      error.includes("release tag v9.9.9 does not match v0.1.11"),
     ),
   );
 });
 
 test("rejects workspace, site, README, and runtime version drift", () => {
   const cases = [
-    ["apps/web/package.json", (text) => text.replace('"version": "0.1.10"', '"version": "0.1.3"')],
+    ["apps/web/package.json", (text) => text.replace('"version": "0.1.11"', '"version": "0.1.3"')],
     [
       "apps/site/src/release.ts",
-      (text) => text.replace('RELEASE_TAG = "v0.1.10"', 'RELEASE_TAG = "v0.1.3"'),
+      (text) => text.replace('RELEASE_TAG = "v0.1.11"', 'RELEASE_TAG = "v0.1.3"'),
     ],
-    ["README.md", (text) => text.replace("Download v0.1.10", "Download v0.1.3")],
+    ["README.md", (text) => text.replace("Download v0.1.11", "Download v0.1.3")],
     [
       "apps/desktop/src/target-manager.ts",
-      (text) => text.replace('version: "0.1.10"', 'version: "0.1.3"'),
+      (text) => text.replace('version: "0.1.11"', 'version: "0.1.3"'),
     ],
     [
       "apps/site/src/docs/content.ts",
@@ -76,7 +76,7 @@ test("rejects app-wire matrix changes until the release surfaces agree", () => {
 test("rejects app-wire provenance changes until the release surfaces agree", () => {
   const drifted = changed("compat/omp-app-matrix.json", (text) =>
     text.replace(
-      '"sourceCommit": "1ada5fc2f0d6f9026d373cd25e004b974437651e"',
+      '"sourceCommit": "15527d1f00bac22705f63f80b29c0c30e67fc5da"',
       '"sourceCommit": "0000000000000000000000000000000000000000"',
     ),
   );
@@ -105,13 +105,13 @@ test("rejects drift in verified OMP runtime provenance", () => {
   const cases = [
     (text) =>
       text.replace(
-        "1ada5fc2f0d6f9026d373cd25e004b974437651e",
+        "15527d1f00bac22705f63f80b29c0c30e67fc5da",
         "0000000000000000000000000000000000000000",
       ),
-    (text) => text.replace('"sourceTag": "t4code-16.5.0-appserver-4"', '"sourceTag": "wrong-tag"'),
+    (text) => text.replace('"sourceTag": "t4code-16.5.1-appserver-1"', '"sourceTag": "wrong-tag"'),
     (text) =>
       text.replace(
-        '"upstreamCommit": "3047c27c332c5629c8e063283d349384c10c9a56"',
+        '"upstreamCommit": "14b5da76a9aece9a469288718d22c3d624daf033"',
         '"upstreamCommit": "0000000000000000000000000000000000000000"',
       ),
     (text) => text.replace('"complete-session-event-projection"', '"Wrong integration patch"'),
@@ -173,7 +173,7 @@ test("rejects stale README release URLs while allowing historical prose", () => 
   const staleLink = changed("README.md", (text) => `${text}\n[Old release](${oldReleaseUrl})\n`);
   assert.ok(
     collectReleaseConsistencyErrors(staleLink).some((error) =>
-      error.includes("release URL for v0.1.3; expected v0.1.10"),
+      error.includes("release URL for v0.1.3; expected v0.1.11"),
     ),
   );
   assert.deepEqual(collectReleaseConsistencyErrors(files), []);
