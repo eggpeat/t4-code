@@ -1,26 +1,22 @@
-## Prompt and session truth
+## Named local profiles
 
-T4 Code v0.1.19 shows a user prompt as soon as OMP accepts it. That pending message is replayed after reconnects and snapshots, remains visible while context compacts, and retires only when the host settles or discards its exact entry. Steering and queued follow-ups use the same ordered lifecycle.
+T4 Code v0.1.20 discovers the named OMP profiles on your machine (the `~/.omp/profiles` layout plus the default) and runs a separate appserver for each one. Every profile is its own local host with its own socket, service registration, and log directory. The Hosts screen starts, stops, or restarts a profile and can mark it to start with T4; the default profile keeps starting automatically.
 
-The sidebar and transcript now reconcile against a complete current session inventory. Stale Working and Compacting labels clear only from newer host evidence; cached or incomplete inventories stay read-only and cannot erase a live turn. Context compaction has its own visible activity state, and recovery uses one catch-up indicator instead of duplicate warnings.
+## Host-aware settings and account visibility
 
-## Transcript fidelity and bounds
+Settings carry an explicit host selector, and each connected host keeps its own staged drafts. For hosts that grant `broker.read`, a one-sentence status line reports where that host's accounts come from: local files, a connected broker endpoint, or a missing token. The line never includes credentials, and hosts that cannot answer are labeled unsupported instead of guessed at.
 
-Known OMP tool calls, plans, todos, collaboration exchanges, and child-agent messages render as semantic rows. Child-agent transcripts and durable transcript images can be opened from the session. Image prompts are chunked and capability-gated rather than embedded in terminal frames.
+A per-host Usage screen reads provider limits, usage windows, and reset times through `usage.read`. Reports show their age and are labeled stale after five minutes. Provider-specific metadata and raw payloads are dropped before anything reaches the screen.
 
-Transcript entries, live messages, tool values, terminal output, child-agent history, image caches, and the on-disk projection cache all have explicit retention limits. Large command output is clipped in the client instead of remaining in the React tree indefinitely.
+## Semantic session controls and continuity
 
-## Updates and release authority
-
-Desktop and Android builds now expose a user-initiated update check. Each downloaded package is matched to the published release manifest, the package's SHA-256 digest, and the expected package identity before installation. T4 does not force client updates.
-
-CI runs core, tooling, and Android gates in parallel behind one required `verify` result. A release publishes only after a successful main-branch CI run for the exact tagged commit; later pushes cannot cancel that authority run.
+The thinking menu lists Off, Auto, and only the concrete effort levels the current model supports, in the order the host reports them. Off floors to the provider's minimum on models that cannot disable reasoning, and fast mode is offered only when the model supports it. A control change from a second client converges everywhere as host-confirmed state, and reconnects resume the session without duplicate output.
 
 ## Runtime provenance
 
-T4 Code v0.1.19 vendors app-wire 0.5.5 from integration commit [6a87fa64](https://github.com/lyc-aon/oh-my-pi/commit/6a87fa6407ebff20417b4d52885a6bb3091003ea), source tree `a2495fe8781c979184fe7fb9a6d37d8f33bad30f`. The client contract remains `omp-app/1`.
+T4 Code v0.1.20 vendors app-wire 0.5.7 from integration commit [ee1b794f](https://github.com/lyc-aon/oh-my-pi/commit/ee1b794f1d0638b3d6797c5220e5eafe69d693db), source tree `421e29e6ed9203113345906e2d24c042949d0f61`. The client contract remains `omp-app/1`.
 
-The matching OMP 17.0.0 runtime is built from [3cba4bda](https://github.com/lyc-aon/oh-my-pi/commit/3cba4bda41d2b8e4d304c43471735657893d3b62) and tagged [t4code-17.0.0-appserver-2](https://github.com/lyc-aon/oh-my-pi/tree/t4code-17.0.0-appserver-2). This revision adds accepted-prompt lifecycle replay, preserves custom message metadata, normalizes xdev tool envelopes, and reuses trusted native CI artifacts. Fork CI requires the release commit to descend from the exact official base.
+The matching OMP 17.0.0 runtime is built from the same commit [ee1b794f](https://github.com/lyc-aon/oh-my-pi/commit/ee1b794f1d0638b3d6797c5220e5eafe69d693db) and tagged [t4code-17.0.0-appserver-4](https://github.com/lyc-aon/oh-my-pi/tree/t4code-17.0.0-appserver-4). This revision scopes each appserver to its OMP profile, adds host-scoped usage and broker-status commands, reports semantic thinking and fast state, and bounds project catalog resolution. Fork CI requires the release commit to descend from the exact official base.
 
 The integration is based on the official upstream [v17.0.0 tag](https://github.com/can1357/oh-my-pi/tree/v17.0.0), commit [d5cd24f3](https://github.com/can1357/oh-my-pi/commit/d5cd24f39a951bfbd50dc8f50bcf095d59694d6c). Official upstream OMP v17.0.0 has no `appserver` command and cannot host T4 Code.
 

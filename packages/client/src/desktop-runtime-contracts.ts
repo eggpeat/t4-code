@@ -7,6 +7,12 @@ import type {
   ConnectionStateEvent,
   ConnectResult,
   DisconnectResult,
+  LocalProfileAddRequest,
+  LocalProfileListResult,
+  LocalProfileRemoveResult,
+  LocalProfileRequest,
+  LocalProfileResult,
+  LocalProfileUpdateRequest,
   DesktopTarget,
   DesktopUpdateOpenEvent,
   DesktopUpdateRendererReadyResult,
@@ -53,6 +59,14 @@ export interface DesktopShellPort {
   readonly serviceStop?: () => Promise<ServiceActionResult>;
   readonly serviceRestart?: () => Promise<ServiceActionResult>;
   readonly serviceUninstall?: () => Promise<ServiceActionResult>;
+  readonly listProfiles?: () => Promise<LocalProfileListResult>;
+  readonly addProfile?: (request: LocalProfileAddRequest) => Promise<LocalProfileResult>;
+  readonly updateProfile?: (request: LocalProfileUpdateRequest) => Promise<LocalProfileResult>;
+  readonly removeProfile?: (request: LocalProfileRequest) => Promise<LocalProfileRemoveResult>;
+  readonly profileStatus?: (request: LocalProfileRequest) => Promise<LocalProfileResult>;
+  readonly profileStart?: (request: LocalProfileRequest) => Promise<LocalProfileResult>;
+  readonly profileStop?: (request: LocalProfileRequest) => Promise<LocalProfileResult>;
+  readonly profileRestart?: (request: LocalProfileRequest) => Promise<LocalProfileResult>;
   readonly getUpdateState?: () => Promise<DesktopUpdateState>;
   readonly checkForUpdate?: () => Promise<DesktopUpdateState>;
   readonly downloadUpdate?: () => Promise<DesktopUpdateState>;

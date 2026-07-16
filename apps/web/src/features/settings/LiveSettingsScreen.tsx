@@ -5,7 +5,9 @@
 // feeds newer host revisions in (drafts survive), and names connection and
 // protocol failures so the screen never spins forever. Saves flow through
 // the live settings.write controller; the restart banner gains a real,
-// serialized service restart for the local host only.
+// serialized service restart for the local host only. The header offers an
+// explicit connected-host selection (each host keeps its own drafts) and the
+// active host's account-broker status.
 import type { DesktopRuntimeController } from "@t4-code/client";
 import {
   Button,
@@ -21,6 +23,7 @@ import { useRef, useState, useSyncExternalStore } from "react";
 import { rendererPlatform } from "../../state/store-instance.ts";
 import { useAppUpdateState } from "../updates/update-store.ts";
 import type { SaveChallenge } from "./live-controller.ts";
+import type { HostSelection } from "./HostSelector.tsx";
 import {
   createLiveSettingsScreenModel,
   type LiveSettingsScreenModel,
@@ -38,7 +41,7 @@ interface RestartState {
   readonly notice: string | null;
 }
 
-const WAIT_COPY: Record<"no-host" | "connecting" | "not-published", { title: string; detail: string; spin: boolean }> = {
+const WAIT_COPY: Record<"no-host" | "connecting" | "disconnected" | "not-published", { title: string; detail: string; spin: boolean }> = {
   "no-host": {
     title: "No host is connected",
     detail: "Settings open once a host answers. Connect or pair one under Hosts.",
@@ -48,6 +51,11 @@ const WAIT_COPY: Record<"no-host" | "connecting" | "not-published", { title: str
     title: "Connecting to the host",
     detail: "Settings open as soon as the connection is up.",
     spin: true,
+  },
+  disconnected: {
+    title: "This host is not connected",
+    detail: "Reconnect it under Hosts, or pick another connected host above.",
+    spin: false,
   },
   "not-published": {
     title: "Waiting for the host's settings",
@@ -117,6 +125,12 @@ export function LiveSettingsScreen({
         }
       : undefined;
 
+  const hostSelection: HostSelection = {
+    choices: state.hosts,
+    activeTargetId: state.phase === "ready" ? state.active.targetId : state.activeTargetId,
+    onSelect: (targetId) => model.selectHost(targetId),
+  };
+
   if (state.phase !== "ready") {
     const copy =
       state.phase === "error"
@@ -125,6 +139,7 @@ export function LiveSettingsScreen({
     return (
       <UnavailableSettingsWorkspace
         copy={{ ...copy, error: state.phase === "error" }}
+        hostSelection={hostSelection}
         onBack={onBack}
         onOpenHosts={onOpenHosts}
         update={update}
@@ -136,7 +151,9 @@ export function LiveSettingsScreen({
     <>
       <SettingsWorkspace
         api={state.api}
+        brokerStatus={{ view: state.broker, onRefresh: () => model.refreshBrokerStatus() }}
         catalogChoices={{ models: state.models, agents: state.agents }}
+        hostSelection={hostSelection}
         onBack={onBack}
         onOpenHosts={onOpenHosts}
         scopes={["global", "session"]}

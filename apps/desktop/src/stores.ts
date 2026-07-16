@@ -5,6 +5,12 @@ import { safeStorage } from "electron";
 import type { CursorRecord, CursorStore } from "@t4-code/client";
 import type { CredentialEntry, CredentialVault, PairedHostRecord, TargetRegistry } from "@t4-code/remote";
 import type { CredentialCiphertextStore, RemoteTargetRecord, RemoteTargetStore, SafeStorageAdapter } from "./remote-runtime/index.ts";
+import {
+  DEFAULT_LOCAL_PROFILE,
+  decodeLocalProfileState,
+  type LocalProfileRegistryState,
+  type LocalProfileStore,
+} from "./local-profiles.ts";
 
 export interface DeviceIdentity {
   readonly deviceId: string;
@@ -120,6 +126,32 @@ export class ElectronCredentialCiphertextStore implements CredentialCiphertextSt
       const state = decodeCredentialState(value);
       this.store.set("version", state.version);
       this.store.set("ciphertexts", state.ciphertexts);
+    });
+  }
+}
+
+export class ElectronLocalProfileStore implements LocalProfileStore {
+  private readonly store: ElectronStore<LocalProfileRegistryState>;
+  private readonly writeQueue = { tail: Promise.resolve() };
+  constructor(
+    store = new ElectronStore<LocalProfileRegistryState>({
+      name: "local-profile-registry",
+      defaults: {
+        version: 1,
+        records: [DEFAULT_LOCAL_PROFILE],
+        ignoredProfileIds: [],
+      },
+    }),
+  ) {
+    this.store = store;
+  }
+  read(): unknown { return this.store.store; }
+  write(value: LocalProfileRegistryState): Promise<void> {
+    return enqueueWrite(this.writeQueue, () => {
+      const state = decodeLocalProfileState(value);
+      this.store.set("version", state.version);
+      this.store.set("records", state.records);
+      this.store.set("ignoredProfileIds", state.ignoredProfileIds);
     });
   }
 }

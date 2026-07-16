@@ -10,6 +10,12 @@ import type {
   ConnectResult,
   DesktopTarget,
   DisconnectResult,
+  LocalProfileAddRequest,
+  LocalProfileListResult,
+  LocalProfileRemoveResult,
+  LocalProfileRequest,
+  LocalProfileResult,
+  LocalProfileUpdateRequest,
   PairRequest,
   PairResult,
   RendererServerFrameEvent,
@@ -32,6 +38,14 @@ import {
 } from "../src/transcript-retention.ts";
 
 const target = (targetId: string, state: DesktopTarget["state"] = "disconnected"): DesktopTarget => ({ targetId, label: targetId, kind: targetId === "local" ? "local" : "remote", state, paired: true });
+const localProfile = (profileId: string) => ({
+  profileId,
+  label: profileId === "default" ? "Default" : "Fable Swarm",
+  targetId: profileId === "default" ? "local" : `local:${profileId}`,
+  autoStart: profileId === "default",
+  isDefault: profileId === "default",
+  service: { definition: "current" as const, service: "running" as const, diagnostics: "" },
+});
 const remoteTargetRequest = (targetId: string): TargetAddRequest => ({
   target: {
     targetId,
@@ -105,6 +119,30 @@ class FakeShell implements DesktopShellPort {
   async pair(request: PairRequest): Promise<PairResult> { return { targetId: request.targetId, paired: true }; }
   async addTarget(request: TargetAddRequest): Promise<TargetAddResult> { return { target: target(request.target.targetId) }; }
   async removeTarget(request: TargetRequest): Promise<TargetRemoveResult> { return { targetId: request.targetId, removed: true }; }
+  async listProfiles(): Promise<LocalProfileListResult> {
+    return { profiles: [localProfile("default"), localProfile("fable-swarm")] };
+  }
+  async addProfile(request: LocalProfileAddRequest): Promise<LocalProfileResult> {
+    return { profile: localProfile(request.profile.profileId) };
+  }
+  async updateProfile(request: LocalProfileUpdateRequest): Promise<LocalProfileResult> {
+    return { profile: localProfile(request.profileId) };
+  }
+  async removeProfile(request: LocalProfileRequest): Promise<LocalProfileRemoveResult> {
+    return { profileId: request.profileId, removed: true };
+  }
+  async profileStatus(request: LocalProfileRequest): Promise<LocalProfileResult> {
+    return { profile: localProfile(request.profileId) };
+  }
+  async profileStart(request: LocalProfileRequest): Promise<LocalProfileResult> {
+    return { profile: localProfile(request.profileId) };
+  }
+  async profileStop(request: LocalProfileRequest): Promise<LocalProfileResult> {
+    return { profile: localProfile(request.profileId) };
+  }
+  async profileRestart(request: LocalProfileRequest): Promise<LocalProfileResult> {
+    return { profile: localProfile(request.profileId) };
+  }
   onServerFrame(listener: (event: RendererServerFrameEvent) => void): () => void { this.frames.add(listener); return () => this.frames.delete(listener); }
   onConnectionState(listener: (event: ConnectionStateEvent) => void): () => void { this.states.add(listener); return () => this.states.delete(listener); }
   onRuntimeError(listener: (event: RuntimeErrorEvent) => void): () => void { this.errors.add(listener); return () => this.errors.delete(listener); }
@@ -140,6 +178,20 @@ async function leaseRuntime(
   return { shell, runtime };
 }
 describe("desktop runtime projection", () => {
+  it("keeps the optional profile bridge structurally typed on DesktopShellPort", async () => {
+    const shell: DesktopShellPort = new FakeShell();
+    expect(await shell.listProfiles?.()).toEqual({
+      profiles: [localProfile("default"), localProfile("fable-swarm")],
+    });
+    expect(await shell.profileStart?.({ profileId: "fable-swarm" })).toEqual({
+      profile: localProfile("fable-swarm"),
+    });
+    expect(await shell.removeProfile?.({ profileId: "fable-swarm" })).toEqual({
+      profileId: "fable-swarm",
+      removed: true,
+    });
+  });
+
   it("redacts auth secrets and Linux/macOS home paths at the renderer boundary", () => {
     const safe = redactedMessage(
       [

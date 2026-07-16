@@ -106,6 +106,13 @@ export type {
   DesktopUpdateOpenEvent,
   DesktopUpdatePhase,
   DesktopUpdateState,
+  LocalProfile,
+  LocalProfileAddRequest,
+  LocalProfileListResult,
+  LocalProfileRemoveResult,
+  LocalProfileRequest,
+  LocalProfileResult,
+  LocalProfileUpdateRequest,
 } from "@t4-code/protocol/desktop-ipc";
 export { redactedMessage } from "./desktop-runtime-contracts.ts";
 export type {

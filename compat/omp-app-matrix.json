@@ -2,21 +2,21 @@
   "appProtocol": "omp-app/1",
   "appWire": {
     "package": "@oh-my-pi/app-wire",
-    "version": "0.5.5",
+    "version": "0.5.7",
     "sourceRepository": "https://github.com/lyc-aon/oh-my-pi",
-    "sourceCommit": "6a87fa6407ebff20417b4d52885a6bb3091003ea",
-    "sourceTreeHash": "a2495fe8781c979184fe7fb9a6d37d8f33bad30f",
-    "tarball": "vendor/app-wire/oh-my-pi-app-wire-0.5.5.tgz",
-    "tarballSha256": "049d92d47c0c29a019c3844072b96198105116c452a54182163ef78994ef557e",
+    "sourceCommit": "ee1b794f1d0638b3d6797c5220e5eafe69d693db",
+    "sourceTreeHash": "421e29e6ed9203113345906e2d24c042949d0f61",
+    "tarball": "vendor/app-wire/oh-my-pi-app-wire-0.5.7.tgz",
+    "tarballSha256": "e331a50178b10a11e0a5eccfb29fde41cdd25c94cb64668b491c395630cbce2d",
     "goldenCorpusSha256": "e92d3d7a4848ab6ea6403cc1c1faa6912f8fdc75d2a6abf663ece0154a6eb7fa"
   },
   "verifiedRuntime": {
     "package": "omp",
     "version": "17.0.0",
     "sourceRepository": "https://github.com/lyc-aon/oh-my-pi",
-    "sourceCommit": "3cba4bda41d2b8e4d304c43471735657893d3b62",
-    "sourceUrl": "https://github.com/lyc-aon/oh-my-pi/commit/3cba4bda41d2b8e4d304c43471735657893d3b62",
-    "sourceTag": "t4code-17.0.0-appserver-2",
+    "sourceCommit": "ee1b794f1d0638b3d6797c5220e5eafe69d693db",
+    "sourceUrl": "https://github.com/lyc-aon/oh-my-pi/commit/ee1b794f1d0638b3d6797c5220e5eafe69d693db",
+    "sourceTag": "t4code-17.0.0-appserver-4",
     "upstreamRepository": "https://github.com/can1357/oh-my-pi",
     "upstreamTag": "v17.0.0",
     "upstreamCommit": "d5cd24f39a951bfbd50dc8f50bcf095d59694d6c",
@@ -59,12 +59,16 @@
       "xdev-tool-envelope-normalization",
       "plain-text-xdev-device-normalization",
       "accepted-prompt-lifecycle-preservation",
+      "profile-scoped-appserver-lifecycle",
+      "bounded-project-catalog-resolution",
+      "host-scoped-usage-and-broker-status",
+      "semantic-thinking-and-fast-state",
       "trusted-native-build-artifact-reuse"
     ],
     "upstreamTagContainsIntegrationPatches": false
   },
   "desktop": {
     "package": "@t4-code/protocol",
-    "version": "0.1.19"
+    "version": "0.1.20"
   }
 }

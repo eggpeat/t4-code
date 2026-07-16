@@ -4,6 +4,10 @@
  */
 import type { ReactNode } from "react";
 import { useId, useMemo, useState } from "react";
+// T4 integration: expand/collapse inside a virtualized transcript must keep
+// the clicked control anchored (outside a timeline the hook is a plain
+// mutation, so these parts stay host-agnostic).
+import { useAnchoredDisclosure } from "../disclosure-anchor.tsx";
 import type { ToolRenderHost, ToolResultImage, ToolResultLike } from "./types.ts";
 import {
   decodeResultImageBytes,
@@ -218,6 +222,7 @@ export function Output({
   bare,
 }: OutputProps): ReactNode {
   const [expanded, setExpanded] = useState(false);
+  const anchoredToggle = useAnchoredDisclosure();
   const contentId = useId();
   const bounded = useMemo(() => boundToolTextForDisplay(text), [text]);
   const lines = useMemo(() => bounded.text.split("\n"), [bounded.text]);
@@ -248,7 +253,9 @@ export function Output({
           aria-expanded={expanded}
           type="button"
           className="tv-expand"
-          onClick={() => setExpanded((v) => !v)}
+          onClick={(event) =>
+            anchoredToggle(event.currentTarget, () => setExpanded((v) => !v))
+          }
         >
           {expanded
             ? bounded.truncated
@@ -384,6 +391,7 @@ export function InvalidArg({ what }: { what?: string }): ReactNode {
  */
 export function DiffBlock({ diff, maxLines = 80 }: { diff: string; maxLines?: number }): ReactNode {
   const [expanded, setExpanded] = useState(false);
+  const anchoredToggle = useAnchoredDisclosure();
   const contentId = useId();
   const bounded = useMemo(() => boundToolTextForDisplay(diff), [diff]);
   const lines = useMemo(() => bounded.text.split("\n"), [bounded.text]);
@@ -412,7 +420,9 @@ export function DiffBlock({ diff, maxLines = 80 }: { diff: string; maxLines?: nu
           aria-expanded={expanded}
           type="button"
           className="tv-expand"
-          onClick={() => setExpanded((v) => !v)}
+          onClick={(event) =>
+            anchoredToggle(event.currentTarget, () => setExpanded((v) => !v))
+          }
         >
           {expanded
             ? bounded.truncated

@@ -2,13 +2,22 @@ import { describe, expect, it } from "vitest";
 import { chmod, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { appserverLogsDirectory, DesktopLifecycle } from "../src/lifecycle.ts";
+import {
+  appserverLogsDirectory,
+  DesktopLifecycle,
+  type DesktopLifecycleOptions,
+} from "../src/lifecycle.ts";
 import { DesktopIpcRegistry, type IpcMainLike } from "../src/ipc.ts";
 import { discoverOmpExecutable } from "../src/service.ts";
 import type { TargetManagerOptions } from "../src/target-manager.ts";
 import type { ServiceManager } from "@t4-code/service-manager";
 import type { ProcessRunner } from "@t4-code/remote";
 import type { ApplicationMenuOptions } from "../src/menu.ts";
+import {
+  DEFAULT_LOCAL_PROFILE,
+  LocalProfileRegistry,
+  type LocalProfileRegistryState,
+} from "../src/local-profiles.ts";
 
 describe("appserver log authority", () => {
   it("stays independent from Electron user-data overrides", () => {
@@ -20,6 +29,12 @@ describe("appserver log authority", () => {
     );
     expect(appserverLogsDirectory("/Users/alice", "darwin", {})).toBe(
       "/Users/alice/Library/Logs/T4 Code/appserver",
+    );
+    expect(appserverLogsDirectory("/home/alice", "linux", {}, "fable-swarm")).toBe(
+      "/home/alice/.local/state/t4-code/appserver/profiles/fable-swarm",
+    );
+    expect(appserverLogsDirectory("/Users/alice", "darwin", {}, "fable-swarm")).toBe(
+      "/Users/alice/Library/Logs/T4 Code/appserver/profiles/fable-swarm",
     );
   });
 });
@@ -71,7 +86,7 @@ function setup(
   probeAppserver: (executable: string) => Promise<boolean> = async () => true,
   overrides: {
     readonly discoverExecutable?: () => Promise<string | undefined>;
-    readonly createServiceManager?: () => ServiceManager;
+    readonly createServiceManager?: NonNullable<DesktopLifecycleOptions["createServiceManager"]>;
   } = {},
 ) {
   const app = new FakeApp();
@@ -84,6 +99,15 @@ function setup(
   let updateScheduleCount = 0;
   let updateDisposeCount = 0;
   let menuOptions: ApplicationMenuOptions | undefined;
+  let localProfileState: LocalProfileRegistryState = {
+    version: 1,
+    records: [DEFAULT_LOCAL_PROFILE],
+    ignoredProfileIds: [],
+  };
+  const localProfileRegistry = new LocalProfileRegistry({
+    read: () => localProfileState,
+    write: async (value) => { localProfileState = value; },
+  }, async () => [DEFAULT_LOCAL_PROFILE]);
   const updateState = { version: 1 as const, currentVersion: "0.1.17", phase: "idle" as const };
   const updateController = {
     getState: () => updateState,
@@ -107,6 +131,7 @@ function setup(
     loadIdentity: () => ({ deviceId: "device-test", deviceName: "Desktop Test" }),
     createCursorStore: () => ({ load: () => [], save: () => {} }),
     createCredentials: () => undefined,
+    createLocalProfileRegistry: () => localProfileRegistry,
     discoverExecutable: overrides.discoverExecutable ?? (serviceManager === undefined ? async () => undefined : async () => "/opt/omp/bin/omp"),
     ...(
       overrides.createServiceManager === undefined && serviceManager === undefined
@@ -117,7 +142,7 @@ function setup(
     createUpdateController: () => updateController as never,
     installMenu: (options) => { menuOptions = options; },
   });
-  return { app, windows, ipc, registries, runtimes, lifecycle, manager, get managerOptions() { return managerOptions; }, get closeCount() { return closeCount; }, get updateScheduleCount() { return updateScheduleCount; }, get updateDisposeCount() { return updateDisposeCount; }, get menuOptions() { return menuOptions; } };
+  return { app, windows, ipc, registries, runtimes, lifecycle, manager, localProfileRegistry, get managerOptions() { return managerOptions; }, get closeCount() { return closeCount; }, get updateScheduleCount() { return updateScheduleCount; }, get updateDisposeCount() { return updateDisposeCount; }, get menuOptions() { return menuOptions; } };
 }
 
 describe("desktop Electron lifecycle", () => {
@@ -253,6 +278,56 @@ describe("desktop Electron lifecycle", () => {
     expect(calls).toEqual([]);
     expect((fixture.runtimes[0] as { getServiceManager: () => ServiceManager | undefined }).getServiceManager()).toBe(service);
     expect(fixture.windows).toHaveLength(1);
+    await fixture.lifecycle.stop();
+  });
+  it("shares in-flight profile discovery but revalidates the executable on later recovery", async () => {
+    const service: ServiceManager = {
+      inspect: async () => ({ definition: "current", service: "running", diagnostics: "" }),
+      install: async () => {},
+      start: async () => {},
+      stop: async () => {},
+      restart: async () => {},
+      uninstall: async () => {},
+    };
+    const executableDiscoveries = [
+      "/opt/old/omp",
+      "/opt/current/omp",
+      "/opt/newer/omp",
+    ];
+    let discoveries = 0;
+    const managerExecutables: string[] = [];
+    const fixture = setup(service, async () => true, {
+      discoverExecutable: async () => {
+        const executable = executableDiscoveries[discoveries];
+        discoveries += 1;
+        return executable;
+      },
+      createServiceManager: (options) => {
+        managerExecutables.push(`${options.profileId ?? "default"}:${options.executable}`);
+        return service;
+      },
+    });
+    await fixture.localProfileRegistry.add({ profileId: "profile-one", label: "Profile One" });
+    await fixture.localProfileRegistry.add({ profileId: "profile-two", label: "Profile Two" });
+    await fixture.lifecycle.start();
+    const runtime = fixture.runtimes[0] as {
+      profileRuntime: {
+        list(): Promise<unknown>;
+        status(profileId: string): Promise<unknown>;
+      };
+    };
+    await runtime.profileRuntime.list();
+    expect(discoveries).toBe(2);
+    expect(managerExecutables).toEqual([
+      "default:/opt/old/omp",
+      "profile-one:/opt/current/omp",
+      "profile-two:/opt/current/omp",
+    ]);
+
+    await fixture.localProfileRegistry.add({ profileId: "profile-three", label: "Profile Three" });
+    await runtime.profileRuntime.status("profile-three");
+    expect(discoveries).toBe(3);
+    expect(managerExecutables.at(-1)).toBe("profile-three:/opt/newer/omp");
     await fixture.lifecycle.stop();
   });
   it("cancels and awaits in-flight service recovery during teardown", async () => {

@@ -9,7 +9,10 @@ import {
   RuntimeOptions,
 } from "../src/features/composer/ComposerRuntimeOptions.tsx";
 import { ContextMeter } from "../src/features/composer/ContextMeter.tsx";
-import type { ComposerControlsSnapshot } from "../src/features/session-runtime/session-controls.ts";
+import {
+  thinkingValueLabel,
+  type ComposerControlsSnapshot,
+} from "../src/features/session-runtime/session-controls.ts";
 import { CopyButton } from "../src/features/transcript/Markdown.tsx";
 
 const CONTROLS: ComposerControlsSnapshot = {
@@ -30,10 +33,15 @@ const CONTROLS: ComposerControlsSnapshot = {
   thinkingSupported: true,
   thinkingUnsupportedReason: null,
   thinking: "medium",
+  thinkingEffective: "medium",
+  thinkingResolved: null,
+  thinkingOffFloored: false,
   thinkingLevels: ["medium", "high"],
   fastSupported: true,
   fastUnsupportedReason: null,
   fast: false,
+  fastAvailable: true,
+  fastActive: false,
   modeSupported: true,
   mode: "build",
   attachmentsSupported: true,
@@ -47,16 +55,22 @@ function buttonTags(markup: string): readonly string[] {
 
 describe("phone touch targets", () => {
   it("describes fast mode as provider priority without changing reasoning effort", () => {
-    expect(fastModeTooltip(false)).toBe(
-      "Request provider priority processing when supported; reasoning effort is unchanged",
+    expect(fastModeTooltip({ available: true, enabled: false, active: false })).toBe(
+      "Enable provider priority processing for this model; reasoning effort is unchanged",
     );
-    expect(fastModeTooltip(true)).toBe(
-      "Fast mode requests provider priority processing; reasoning effort is unchanged",
+    expect(fastModeTooltip({ available: true, enabled: true, active: true })).toBe(
+      "Provider priority is active for this model; reasoning effort is unchanged",
     );
+  });
+
+  it("does not invent an effective thinking level for older fixtures", () => {
+    expect(thinkingValueLabel({ thinking: "medium" })).toBe("Medium");
+    expect(thinkingValueLabel({ thinking: "auto" })).toBe("Auto");
   });
 
   it("renders every always-visible composer control at 44 CSS pixels", () => {
     const runOptions = renderToStaticMarkup(
+
       <RunOptionsMenu summary="Fixture model · Medium">
         <span>Options</span>
       </RunOptionsMenu>,

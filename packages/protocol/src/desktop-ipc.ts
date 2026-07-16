@@ -25,6 +25,14 @@ export const DESKTOP_IPC_CHANNELS = [
   "omp:targets:list",
   "omp:targets:add",
   "omp:targets:remove",
+  "omp:profiles:list",
+  "omp:profiles:add",
+  "omp:profiles:update",
+  "omp:profiles:remove",
+  "omp:profiles:status",
+  "omp:profiles:start",
+  "omp:profiles:stop",
+  "omp:profiles:restart",
   "omp:command",
   "omp:confirm",
   "omp:terminal:input",
@@ -81,6 +89,42 @@ export type ServiceAction = "install" | "start" | "stop" | "restart" | "uninstal
 export interface ServiceActionRequest {}
 export interface ServiceActionResult {
   completed: true;
+}
+export interface LocalProfile {
+  readonly profileId: string;
+  readonly label: string;
+  readonly targetId: string;
+  readonly autoStart: boolean;
+  readonly isDefault: boolean;
+  readonly service: ServiceInspection;
+}
+export interface LocalProfileListRequest {}
+export interface LocalProfileListResult {
+  readonly profiles: readonly LocalProfile[];
+}
+export interface LocalProfileAddRequest {
+  readonly profile: {
+    readonly profileId: string;
+    readonly label?: string;
+    readonly autoStart?: boolean;
+  };
+}
+export interface LocalProfileUpdateRequest {
+  readonly profileId: string;
+  readonly changes: {
+    readonly label?: string;
+    readonly autoStart?: boolean;
+  };
+}
+export interface LocalProfileRequest {
+  readonly profileId: string;
+}
+export interface LocalProfileResult {
+  readonly profile: LocalProfile;
+}
+export interface LocalProfileRemoveResult {
+  readonly profileId: string;
+  readonly removed: true;
 }
 export interface BootstrapResult {
   platform: DesktopPlatform;
@@ -385,6 +429,14 @@ export interface DesktopInvokeRequestMap {
   "omp:targets:list": TargetListRequest;
   "omp:targets:add": TargetAddRequest;
   "omp:targets:remove": TargetRequest;
+  "omp:profiles:list": LocalProfileListRequest;
+  "omp:profiles:add": LocalProfileAddRequest;
+  "omp:profiles:update": LocalProfileUpdateRequest;
+  "omp:profiles:remove": LocalProfileRequest;
+  "omp:profiles:status": LocalProfileRequest;
+  "omp:profiles:start": LocalProfileRequest;
+  "omp:profiles:stop": LocalProfileRequest;
+  "omp:profiles:restart": LocalProfileRequest;
   "omp:command": CommandRequest;
   "omp:confirm": ConfirmRequest;
   "omp:terminal:input": TerminalInputRequest;
@@ -411,6 +463,14 @@ export interface DesktopInvokeResponseMap {
   "omp:targets:list": TargetListResult;
   "omp:targets:add": TargetAddResult;
   "omp:targets:remove": TargetRemoveResult;
+  "omp:profiles:list": LocalProfileListResult;
+  "omp:profiles:add": LocalProfileResult;
+  "omp:profiles:update": LocalProfileResult;
+  "omp:profiles:remove": LocalProfileRemoveResult;
+  "omp:profiles:status": LocalProfileResult;
+  "omp:profiles:start": LocalProfileResult;
+  "omp:profiles:stop": LocalProfileResult;
+  "omp:profiles:restart": LocalProfileResult;
   "omp:command": CommandResult;
   "omp:confirm": ConfirmResult;
   "omp:terminal:input": TerminalResult;
@@ -461,8 +521,66 @@ function exact(value: Record<string, unknown>, keys: readonly string[]): void {
 }
 function target(value: unknown): string {
   const s = controlFree(value, "targetId", 128);
-  if (!/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(s)) throw new Error("invalid targetId");
-  return s;
+  if (/^[A-Za-z0-9][A-Za-z0-9._-]*$/u.test(s)) return s;
+  if (s.startsWith("local:") && s !== "local:default") {
+    profileId(s.slice("local:".length));
+    return s;
+  }
+  throw new Error("invalid targetId");
+}
+function remoteTarget(value: unknown): string {
+  const id = target(value);
+  if (id === "local" || id.startsWith("local:")) throw new Error("reserved targetId");
+  return id;
+}
+const PROFILE_NAME = /^[a-z0-9][a-z0-9._-]{0,63}$/u;
+const WINDOWS_RESERVED_PROFILE = /^(?:con|prn|aux|nul|com[0-9]|lpt[0-9])(?:\..*)?$/iu;
+export function decodeLocalProfileId(value: unknown): string {
+  const id = controlFree(value, "profileId", 64);
+  if (
+    id === "." ||
+    id === ".." ||
+    id.endsWith(".") ||
+    !PROFILE_NAME.test(id) ||
+    WINDOWS_RESERVED_PROFILE.test(id)
+  )
+    throw new Error("invalid profileId");
+  return id;
+}
+function profileId(value: unknown): string {
+  return decodeLocalProfileId(value);
+}
+function profileLabel(value: unknown): string {
+  const label = controlFree(value, "profile label", 128).trim();
+  if (label.length === 0) throw new Error("invalid profile label");
+  return label;
+}
+function optionalBoolean(value: unknown, name: string): boolean | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== "boolean") throw new Error(`invalid ${name}`);
+  return value;
+}
+function localProfileInput(value: unknown): LocalProfileAddRequest["profile"] {
+  const item = object(value, "profile");
+  exact(item, ["profileId", "label", "autoStart"]);
+  const label = item.label === undefined ? undefined : profileLabel(item.label);
+  const autoStart = optionalBoolean(item.autoStart, "autoStart");
+  return {
+    profileId: profileId(item.profileId),
+    ...(label === undefined ? {} : { label }),
+    ...(autoStart === undefined ? {} : { autoStart }),
+  };
+}
+function localProfileChanges(value: unknown): LocalProfileUpdateRequest["changes"] {
+  const item = object(value, "profile changes");
+  exact(item, ["label", "autoStart"]);
+  const label = item.label === undefined ? undefined : profileLabel(item.label);
+  const autoStart = optionalBoolean(item.autoStart, "autoStart");
+  if (label === undefined && autoStart === undefined) throw new Error("profile changes are empty");
+  return {
+    ...(label === undefined ? {} : { label }),
+    ...(autoStart === undefined ? {} : { autoStart }),
+  };
 }
 function state(value: unknown): ConnectionState {
   if (
@@ -595,7 +713,7 @@ function targetRecord(value: unknown): TargetAddRequest["target"] {
   if (item.autoConnect !== undefined && typeof item.autoConnect !== "boolean")
     throw new Error("invalid autoConnect");
   return {
-    targetId: target(item.targetId),
+    targetId: remoteTarget(item.targetId),
     label,
     mode,
     address,
@@ -693,6 +811,7 @@ export function decodeDesktopInvokeRequest(input: unknown): DesktopInvokeRequest
   const payload = object(frame.payload, "payload");
   switch (channel) {
     case "omp:targets:list":
+    case "omp:profiles:list":
       exact(payload, []);
       return { channel, payload: {} };
     case "omp:targets:add":
@@ -703,6 +822,25 @@ export function decodeDesktopInvokeRequest(input: unknown): DesktopInvokeRequest
     case "omp:disconnect":
       exact(payload, ["targetId"]);
       return { channel, payload: { targetId: target(payload.targetId) } };
+    case "omp:profiles:add":
+      exact(payload, ["profile"]);
+      return { channel, payload: { profile: localProfileInput(payload.profile) } };
+    case "omp:profiles:update":
+      exact(payload, ["profileId", "changes"]);
+      return {
+        channel,
+        payload: {
+          profileId: profileId(payload.profileId),
+          changes: localProfileChanges(payload.changes),
+        },
+      };
+    case "omp:profiles:remove":
+    case "omp:profiles:status":
+    case "omp:profiles:start":
+    case "omp:profiles:stop":
+    case "omp:profiles:restart":
+      exact(payload, ["profileId"]);
+      return { channel, payload: { profileId: profileId(payload.profileId) } };
     case "omp:pair":
       exact(payload, ["targetId", "code"]);
       {

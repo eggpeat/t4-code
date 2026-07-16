@@ -4,6 +4,7 @@ import { ArrowLeft, Cable, CircleAlert } from "lucide-react";
 import { RAIL_OVERLAY_QUERY, useMediaQuery } from "../../hooks/useMediaQuery.ts";
 import { updateIsAvailable, type AppUpdateState } from "../updates/update-model.ts";
 import { UpdateSettingsPanel } from "../updates/UpdateSettingsPanel.tsx";
+import { HostSelector, type HostSelection } from "./HostSelector.tsx";
 
 export interface UnavailableSettingsCopy {
   readonly title: string;
@@ -18,11 +19,14 @@ export function UnavailableSettingsWorkspace({
   onBack,
   onOpenHosts,
   update,
+  hostSelection,
 }: {
   readonly copy: UnavailableSettingsCopy;
   readonly onBack: () => void;
   readonly onOpenHosts: () => void;
   readonly update: AppUpdateState;
+  /** Other connected hosts the user can switch to while this one is out. */
+  readonly hostSelection?: HostSelection;
 }) {
   const railOverlaid = useMediaQuery(RAIL_OVERLAY_QUERY);
   return (
@@ -33,6 +37,7 @@ export function UnavailableSettingsWorkspace({
         </IconButton>
         <h1 className="font-heading font-semibold text-base">Settings</h1>
         <Badge variant="outline">Application</Badge>
+        <HostSelector fallbackLabel={null} selection={hostSelection} />
         <span className="min-w-0 flex-1" />
         <Button onClick={onOpenHosts} size="sm" variant="outline">
           <Cable />

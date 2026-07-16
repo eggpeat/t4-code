@@ -124,7 +124,7 @@ const install: DocTopic = {
     },
     {
       kind: "p",
-      text: `T4 Code v${RELEASE_VERSION} was verified with OMP ${OMP_RUNTIME_VERSION} integration tag [\`${OMP_RUNTIME_TAG}\`](${OMP_RUNTIME_URL}), commit \`${OMP_RUNTIME_COMMIT}\`. That public integration is based on the [official upstream v${OMP_RUNTIME_VERSION} tag](${OMP_UPSTREAM_URL}) at commit [\`${OMP_UPSTREAM_COMMIT.slice(0, 8)}\`](${OMP_URL}/commit/${OMP_UPSTREAM_COMMIT}). The build preserves sanitized structured tool-result details, streams bounded child-agent transcripts, and authorizes child-transcript image reads through the established session image path. It also publishes host-wide session updates and keeps rename, archive, restore, and permanent delete under OMP authority. T4 Code vendors \`@oh-my-pi/app-wire\` ${APP_WIRE_VERSION}.`,
+      text: `T4 Code v${RELEASE_VERSION} was verified with OMP ${OMP_RUNTIME_VERSION} integration tag [\`${OMP_RUNTIME_TAG}\`](${OMP_RUNTIME_URL}), commit \`${OMP_RUNTIME_COMMIT}\`. That public integration is based on the [official upstream v${OMP_RUNTIME_VERSION} tag](${OMP_UPSTREAM_URL}) at commit [\`${OMP_UPSTREAM_COMMIT.slice(0, 8)}\`](${OMP_URL}/commit/${OMP_UPSTREAM_COMMIT}). The build scopes each app server to its OMP profile, answers host-scoped \`usage.read\` and \`broker.status\` queries with redacted results, reports each model's real thinking levels and fast support, and keeps rename, archive, restore, and permanent delete under OMP authority. T4 Code vendors \`@oh-my-pi/app-wire\` ${APP_WIRE_VERSION}.`,
     },
     {
       kind: "note",
@@ -136,7 +136,7 @@ const install: DocTopic = {
 const firstRun: DocTopic = {
   id: "first-run",
   title: "First run",
-  lede: "Desktop builds can manage a local Oh My Pi app server. Android connects to the T4 gateway on your computer.",
+  lede: "Desktop builds can manage local Oh My Pi app servers, one per profile. Android connects to the T4 gateway on your computer.",
   blocks: [
     {
       kind: "note",
@@ -171,6 +171,15 @@ const firstRun: DocTopic = {
         "**Linux**: a systemd user service. Logs: `~/.local/state/t4-code/appserver`.",
         "**macOS**: a launch agent. Logs: `~/Library/Logs/T4 Code/appserver`.",
       ],
+    },
+    { kind: "h2", id: "first-run-profiles", text: "Named OMP profiles" },
+    {
+      kind: "p",
+      text: "OMP keeps named profiles under `~/.omp/profiles`, each with its own agent configuration. Desktop T4 Code discovers them next to the default profile and lists each one as its own local host, with its own app server, socket, and service registration.",
+    },
+    {
+      kind: "p",
+      text: "The Hosts screen (reachable from Settings) starts, stops, or restarts a profile and can mark it **Start with T4**. The default profile starts automatically; named profiles stay stopped until you start them or opt them in. Logs for a named profile land in a `profiles/<id>` folder under the log directories above.",
     },
     {
       kind: "p",
@@ -294,12 +303,12 @@ const sessionControls: DocTopic = {
     { kind: "h2", id: "session-controls-thinking", text: "Thinking effort" },
     {
       kind: "p",
-      text: "Thinking effort levels, from least to most: `auto`, `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`.",
+      text: "The thinking menu shows `Off`, `Auto`, and then only the concrete effort levels the current model supports, in the order the host reports them. Change models and the menu changes with it. On models that cannot turn reasoning off, `Off` maps to the provider's minimum effort; models without thinking support show the control disabled with the reason.",
     },
     { kind: "h2", id: "session-controls-fast", text: "Fast mode" },
     {
       kind: "p",
-      text: "Fast mode is a single toggle. Like every other control, the value you see is the host's last confirmed value, not a local guess.",
+      text: "Fast mode is a single toggle, offered only when the host reports the current model supports it. Like every other control, the value you see is the host's last confirmed value, not a local guess. That includes changes made from another client: flip fast mode on your phone and the desktop follows the host's confirmation.",
     },
     { kind: "h2", id: "session-controls-slash", text: "Slash commands" },
     {
@@ -382,6 +391,25 @@ const settings: DocTopic = {
     {
       kind: "p",
       text: "Settings load from the connected host and save back to it. If the connection drops before the host confirms a save, your edits stay staged locally; check the host before saving again. There is no hidden second settings store.",
+    },
+    { kind: "h2", id: "settings-hosts", text: "One editor, many hosts" },
+    {
+      kind: "p",
+      text: "With more than one host connected, the header carries an explicit host selector. Each host keeps its own drafts, so switching hosts never mixes staged edits, and the screen always names the host your changes will land on.",
+    },
+    { kind: "h2", id: "settings-broker", text: "Account broker status" },
+    {
+      kind: "p",
+      text: "For hosts that grant it, the header shows one sentence about where the active host's accounts come from: local files, a connected broker endpoint, or a missing token. The status never includes credentials, and hosts that cannot answer are labeled unsupported instead of guessed at.",
+    },
+    { kind: "h2", id: "settings-usage", text: "Account usage" },
+    {
+      kind: "p",
+      text: "The Usage screen lists every connected host that both advertises and grants the `usage.read` command. Pick a host to see its provider accounts, limits, usage windows, and reset times, grouped the way the host reports them.",
+    },
+    {
+      kind: "p",
+      text: "Reports are fetched when you ask and marked with their age; anything older than five minutes is labeled stale rather than silently trusted. T4 Code keeps the display-safe fields (provider, account label, limits, windows) and drops provider-specific metadata and the raw payload before anything reaches the screen.",
     },
     { kind: "h2", id: "settings-roles", text: "Model roles" },
     {

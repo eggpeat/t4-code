@@ -74,6 +74,70 @@ describe("desktop IPC boundary", () => {
       payload: { intent: { hostId: "h", command: "host.list", args: {} } },
     });
   });
+  it("strictly decodes named local targets and profile lifecycle requests", () => {
+    expect(decodeDesktopInvokeRequest({
+      channel: "omp:connect",
+      payload: { targetId: "local:fable-swarm" },
+    })).toEqual({ channel: "omp:connect", payload: { targetId: "local:fable-swarm" } });
+    expect(decodeDesktopInvokeRequest({
+      channel: "omp:profiles:add",
+      payload: {
+        profile: { profileId: "fable-swarm", label: "Fable Swarm", autoStart: true },
+      },
+    })).toEqual({
+      channel: "omp:profiles:add",
+      payload: {
+        profile: { profileId: "fable-swarm", label: "Fable Swarm", autoStart: true },
+      },
+    });
+    expect(decodeDesktopInvokeRequest({
+      channel: "omp:profiles:update",
+      payload: { profileId: "fable-swarm", changes: { autoStart: false } },
+    })).toEqual({
+      channel: "omp:profiles:update",
+      payload: { profileId: "fable-swarm", changes: { autoStart: false } },
+    });
+    for (const channel of [
+      "omp:profiles:remove",
+      "omp:profiles:status",
+      "omp:profiles:start",
+      "omp:profiles:stop",
+      "omp:profiles:restart",
+    ] as const) {
+      expect(decodeDesktopInvokeRequest({
+        channel,
+        payload: { profileId: "fable-swarm" },
+      })).toEqual({ channel, payload: { profileId: "fable-swarm" } });
+    }
+    for (const value of [
+      { channel: "omp:connect", payload: { targetId: "local:default" } },
+      { channel: "omp:profiles:add", payload: { profile: { profileId: "../escape" } } },
+      { channel: "omp:profiles:add", payload: { profile: { profileId: "Fable" } } },
+      {
+        channel: "omp:profiles:update",
+        payload: { profileId: "fable-swarm", changes: {} },
+      },
+      {
+        channel: "omp:profiles:start",
+        payload: { profileId: "fable-swarm", executable: "/tmp/omp" },
+      },
+      {
+        channel: "omp:targets:add",
+        payload: {
+          target: {
+            targetId: "local:fable-swarm",
+            label: "Collision",
+            mode: "direct",
+            address: "100.64.0.1",
+            port: 4210,
+            requestedCapabilities: [],
+            grantedCapabilities: [],
+            status: "unknown",
+          },
+        },
+      },
+    ]) expect(() => decodeDesktopInvokeRequest(value)).toThrow();
+  });
   it("decodes confirmations and target-scoped terminal requests with app-wire bounds", () => {
     expect(
       decodeDesktopInvokeRequest({

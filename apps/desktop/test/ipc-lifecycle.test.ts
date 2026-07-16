@@ -23,6 +23,81 @@ function makeRuntime(serviceManager?: ServiceManager, serviceAvailabilityIssue?:
 const request = (channel: string, payload: unknown = {}): unknown => ({ channel, payload });
 
 describe("desktop IPC lifecycle proof", () => {
+  it("exposes strict profile lifecycle handlers and bounds their service diagnostics", async () => {
+    const ipc = new FakeIpc();
+    const { runtime: baseRuntime } = makeRuntime();
+    const calls: string[] = [];
+    const profile = {
+      profileId: "fable-swarm",
+      label: "Fable Swarm",
+      targetId: "local:fable-swarm",
+      autoStart: true,
+      isDefault: false,
+      service: {
+        definition: "current" as const,
+        service: "running" as const,
+        diagnostics: "token=do-not-render /home/alice/private",
+      },
+      privateValue: "must-not-cross-ipc",
+    };
+    const runtime: IpcRuntime = {
+      ...baseRuntime,
+      profileRuntime: {
+        list: async () => [profile],
+        add: async (input: { profileId: string }) => { calls.push(`add:${input.profileId}`); return profile; },
+        update: async (input: { profileId: string }) => { calls.push(`update:${input.profileId}`); return profile; },
+        remove: async (profileId: string) => { calls.push(`remove:${profileId}`); },
+        status: async (profileId: string) => { calls.push(`status:${profileId}`); return profile; },
+        action: async (profileId: string, action: string) => {
+          calls.push(`${action}:${profileId}`);
+          return profile;
+        },
+      } as never,
+    };
+    new DesktopIpcRegistry(runtime, ipc).install();
+    const event = {
+      sender: runtime.window.webContents,
+      senderFrame: runtime.window.webContents.mainFrame,
+    };
+
+    const listed = await ipc.handlers.get("omp:profiles:list")!(
+      event,
+      request("omp:profiles:list"),
+    ) as { profiles: Array<{ service: { diagnostics: string } }> };
+    expect(listed.profiles[0]?.service.diagnostics).toBe("token=[redacted] [redacted]");
+    expect("privateValue" in (listed.profiles[0] ?? {})).toBe(false);
+    await ipc.handlers.get("omp:profiles:add")!(event, request("omp:profiles:add", {
+      profile: { profileId: "fable-swarm", label: "Fable Swarm", autoStart: true },
+    }));
+    await ipc.handlers.get("omp:profiles:update")!(event, request("omp:profiles:update", {
+      profileId: "fable-swarm",
+      changes: { autoStart: false },
+    }));
+    await ipc.handlers.get("omp:profiles:status")!(event, request("omp:profiles:status", {
+      profileId: "fable-swarm",
+    }));
+    for (const action of ["start", "stop", "restart"] as const) {
+      await ipc.handlers.get(`omp:profiles:${action}`)!(event, request(`omp:profiles:${action}`, {
+        profileId: "fable-swarm",
+      }));
+    }
+    await ipc.handlers.get("omp:profiles:remove")!(event, request("omp:profiles:remove", {
+      profileId: "fable-swarm",
+    }));
+    expect(calls).toEqual([
+      "add:fable-swarm",
+      "update:fable-swarm",
+      "status:fable-swarm",
+      "start:fable-swarm",
+      "stop:fable-swarm",
+      "restart:fable-swarm",
+      "remove:fable-swarm",
+    ]);
+    await expect(ipc.handlers.get("omp:profiles:start")!(event, request("omp:profiles:start", {
+      profileId: "../escape",
+    }))).rejects.toThrow("invalid profileId");
+  });
+
   it("rejects payload keys and channel/action mismatches at the invoke boundary", async () => {
     const ipc = new FakeIpc();
     const { runtime } = makeRuntime();

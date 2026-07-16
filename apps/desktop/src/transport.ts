@@ -188,8 +188,8 @@ export class UnixWebSocketTransport implements OmpTransport {
   }
 }
 
-export function createLocalTransport(): UnixWebSocketTransport {
-  const socketPath = localSocketPath();
+export function createLocalTransport(profileId = "default"): UnixWebSocketTransport {
+  const socketPath = localSocketPath({ profileId });
   if (process.platform === "darwin") ensureMacRuntimeDirectory(dirname(socketPath));
   return new UnixWebSocketTransport({ socketPath });
 }

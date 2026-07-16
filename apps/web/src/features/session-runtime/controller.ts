@@ -187,10 +187,16 @@ export function createFixtureSessionRuntime(options: FixtureRuntimeOptions): Ses
           thinkingUnsupportedReason:
             link === "live" ? null : "This session is read-only right now.",
           thinking,
+          thinkingEffective:
+            thinking === "auto" ? "medium" : thinking === "off" ? "minimal" : thinking,
+          thinkingResolved: thinking === "auto" ? "medium" : null,
+          thinkingOffFloored: thinking === "off",
           thinkingLevels: THINKING_LEVELS,
           fastSupported: link === "live",
           fastUnsupportedReason: link === "live" ? null : "This session is read-only right now.",
           fast,
+          fastAvailable: true,
+          fastActive: fast,
           modeSupported: link === "live",
           mode,
           attachmentsSupported: true,

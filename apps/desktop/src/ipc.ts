@@ -2,6 +2,7 @@ import { ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from "electron";
 import {
   decodeDesktopEvent,
   decodeDesktopInvokeRequest,
+  decodeLocalProfileId,
   decodeDesktopUpdateRendererReadyResult,
   decodeDesktopUpdateState,
   type BootstrapResult,
@@ -17,6 +18,13 @@ import {
   type DesktopUpdateRendererReadyResult,
   type DesktopUpdateState,
   type DisconnectResult,
+  type LocalProfile,
+  type LocalProfileAddRequest,
+  type LocalProfileListResult,
+  type LocalProfileRemoveResult,
+  type LocalProfileRequest,
+  type LocalProfileResult,
+  type LocalProfileUpdateRequest,
   type PairLinkEvent,
   type PairRequest,
   type PairResult,
@@ -39,6 +47,7 @@ import type { ServiceManager } from "@t4-code/service-manager";
 import { redactedMessage } from "@t4-code/client";
 import { trustedSender, type TrustedRenderer } from "./security.ts";
 import type { LocalTargetManager } from "./target-manager.ts";
+import type { LocalProfileRuntime } from "./profile-runtime.ts";
 export interface IpcRuntime {
   readonly manager: LocalTargetManager;
   readonly window: BrowserWindow;
@@ -49,6 +58,7 @@ export interface IpcRuntime {
   readonly getServiceManager?: () => ServiceManager | undefined;
   readonly acquireServiceManager?: () => Promise<ServiceManager | undefined>;
   readonly getServiceAvailabilityIssue?: () => ServiceAvailabilityIssue | undefined;
+  readonly profileRuntime?: LocalProfileRuntime;
   readonly drainPairLinks?: () => readonly PairLinkEvent[];
   readonly drainPendingUpdateOpen?: () => boolean;
   readonly updateController?: {
@@ -171,6 +181,42 @@ export class DesktopIpcRegistry {
       await this.runtime.manager.removeTarget(input.targetId);
       return { targetId: input.targetId, removed: true };
     });
+    this.ipc.handle("omp:profiles:list", async (event, payload: unknown): Promise<LocalProfileListResult> => {
+      this.assertSender(event);
+      decodeRequest("omp:profiles:list", payload);
+      const profiles = await this.localProfiles().list();
+      return { profiles: profiles.map((profile) => this.boundedProfile(profile)) };
+    });
+    this.ipc.handle("omp:profiles:add", async (event, payload: unknown): Promise<LocalProfileResult> => {
+      this.assertSender(event);
+      const input = decodeRequest("omp:profiles:add", payload).payload as LocalProfileAddRequest;
+      return { profile: this.boundedProfile(await this.localProfiles().add(input.profile)) };
+    });
+    this.ipc.handle("omp:profiles:update", async (event, payload: unknown): Promise<LocalProfileResult> => {
+      this.assertSender(event);
+      const input = decodeRequest("omp:profiles:update", payload).payload as LocalProfileUpdateRequest;
+      return { profile: this.boundedProfile(await this.localProfiles().update(input)) };
+    });
+    this.ipc.handle("omp:profiles:remove", async (event, payload: unknown): Promise<LocalProfileRemoveResult> => {
+      this.assertSender(event);
+      const input = decodeRequest("omp:profiles:remove", payload).payload as LocalProfileRequest;
+      await this.localProfiles().remove(input.profileId);
+      return { profileId: input.profileId, removed: true };
+    });
+    this.ipc.handle("omp:profiles:status", async (event, payload: unknown): Promise<LocalProfileResult> => {
+      this.assertSender(event);
+      const input = decodeRequest("omp:profiles:status", payload).payload as LocalProfileRequest;
+      return { profile: this.boundedProfile(await this.localProfiles().status(input.profileId)) };
+    });
+    for (const action of ["start", "stop", "restart"] as const) {
+      this.ipc.handle(`omp:profiles:${action}`, async (event, payload: unknown): Promise<LocalProfileResult> => {
+        this.assertSender(event);
+        const input = decodeRequest(`omp:profiles:${action}`, payload).payload as LocalProfileRequest;
+        return {
+          profile: this.boundedProfile(await this.localProfiles().action(input.profileId, action)),
+        };
+      });
+    }
     this.ipc.handle("omp:service:inspect", async (event, payload: unknown): Promise<ServiceInspection> => {
       this.assertSender(event);
       decodeRequest("omp:service:inspect", payload);
@@ -222,6 +268,8 @@ export class DesktopIpcRegistry {
       "omp:bootstrap", "omp:connect", "omp:disconnect", "omp:command", "omp:confirm",
       "omp:terminal:input", "omp:terminal:resize", "omp:terminal:close", "omp:pair",
       "omp:pair-links:drain", "omp:targets:list", "omp:targets:add", "omp:targets:remove",
+      "omp:profiles:list", "omp:profiles:add", "omp:profiles:update", "omp:profiles:remove",
+      "omp:profiles:status", "omp:profiles:start", "omp:profiles:stop", "omp:profiles:restart",
       "omp:service:inspect", "omp:service:install", "omp:service:start", "omp:service:stop",
       "omp:service:restart", "omp:service:uninstall",
       "app:update:get-state", "app:update:check", "app:update:download", "app:update:restart",
@@ -261,9 +309,7 @@ export class DesktopIpcRegistry {
   private async inspectServiceOnce(recover: boolean): Promise<ServiceInspection> {
     const manager = recover ? await this.acquireServiceManager() : this.currentServiceManager();
     if (manager === undefined) return this.unavailableInspection();
-    const inspection = await manager.inspect();
-      if (!["missing", "current", "drifted"].includes(inspection.definition) || !["stopped", "starting", "running", "failed", "unknown"].includes(inspection.service) || typeof inspection.diagnostics !== "string") throw new Error("invalid service inspection");
-      return { definition: inspection.definition, service: inspection.service, diagnostics: boundedError(new Error(inspection.diagnostics)).message.slice(0, 512) };
+    return this.boundedInspection(await manager.inspect());
   }
   private currentServiceManager(): ServiceManager | undefined {
     return this.runtime.getServiceManager?.() ?? this.runtime.serviceManager;
@@ -309,6 +355,60 @@ export class DesktopIpcRegistry {
       throw new Error("Desktop updates are unavailable in this runtime");
     }
     return this.runtime.updateController;
+  }
+  private localProfiles(): LocalProfileRuntime {
+    if (this.runtime.profileRuntime === undefined)
+      throw new Error("Local OMP profiles are unavailable in this runtime");
+    return this.runtime.profileRuntime;
+  }
+  private boundedInspection(inspection: ServiceInspection): ServiceInspection {
+    if (
+      !["missing", "current", "drifted"].includes(inspection.definition) ||
+      !["stopped", "starting", "running", "failed", "unknown"].includes(inspection.service) ||
+      typeof inspection.diagnostics !== "string"
+    )
+      throw new Error("invalid service inspection");
+    const issue = inspection.issue === undefined
+      ? undefined
+      : {
+          code: ["omp_incompatible", "omp_not_found", "service_unavailable"].includes(
+            inspection.issue.code,
+          )
+            ? inspection.issue.code
+            : "service_unavailable" as const,
+          message: boundedError(new Error(inspection.issue.message)).message.slice(0, 512),
+        };
+    return {
+      definition: inspection.definition,
+      service: inspection.service,
+      diagnostics: boundedError(new Error(inspection.diagnostics)).message.slice(0, 512),
+      ...(issue === undefined ? {} : { issue }),
+    };
+  }
+  private boundedProfile(profile: LocalProfile): LocalProfile {
+    const profileId = decodeLocalProfileId(profile.profileId);
+    const targetId = profileId === "default" ? "local" : `local:${profileId}`;
+    if (
+      typeof profile.label !== "string" ||
+      profile.label.length === 0 ||
+      profile.label.length > 128 ||
+      profile.label.trim() !== profile.label ||
+      [...profile.label].some((character) => {
+        const code = character.codePointAt(0) ?? 0;
+        return code <= 0x1f || (code >= 0x7f && code <= 0x9f);
+      }) ||
+      profile.targetId !== targetId ||
+      typeof profile.autoStart !== "boolean" ||
+      profile.isDefault !== (profileId === "default")
+    ) throw new Error("invalid local profile result");
+    return Object.freeze({
+      profileId,
+      label: profile.label,
+      targetId,
+      autoStart: profile.autoStart,
+      isDefault: profile.isDefault,
+      service: this.boundedInspection(profile.service),
+    });
   }
   private emit(channel: DesktopEventChannel, payload: unknown): void {
     const decoded = decodeDesktopEvent({ channel, payload });

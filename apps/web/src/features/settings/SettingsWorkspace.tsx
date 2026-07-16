@@ -17,6 +17,7 @@ import { UpdateSettingsPanel } from "../updates/UpdateSettingsPanel.tsx";
 import { useAppUpdateState } from "../updates/update-store.ts";
 import { AccentRow } from "./AccentRow.tsx";
 import { FIELD_CLASS } from "./controls.tsx";
+import { BrokerStatusLine, HostSelector, type BrokerStatusAction, type HostSelection } from "./HostSelector.tsx";
 import { buildDiagnosticsExport } from "./diagnostics.ts";
 import { railFocusTarget, type RailKey } from "./keyboard.ts";
 import type { AgentCatalog, ModelChoice } from "./live-catalog.ts";
@@ -295,6 +296,8 @@ export function SettingsWorkspace({
   scopes = EDITABLE_SCOPES,
   restartAction,
   catalogChoices = NO_CHOICES,
+  hostSelection,
+  brokerStatus,
 }: {
   readonly api: SettingsStoreApi;
   /** Renders a back control in the header; the host shell owns navigation. */
@@ -307,6 +310,10 @@ export function SettingsWorkspace({
   readonly restartAction?: RestartAction;
   /** Models and agents the host advertises, for the roles/agents editors. */
   readonly catalogChoices?: SettingsCatalogChoices;
+  /** Connected hosts to switch between; the shell owns the selection. */
+  readonly hostSelection?: HostSelection;
+  /** The active host's account-broker status, when the shell tracks it. */
+  readonly brokerStatus?: BrokerStatusAction;
 }) {
   const viewModel = useSettings(api, (state) => state.viewModel);
   const query = useSettings(api, (state) => state.query);
@@ -422,7 +429,11 @@ export function SettingsWorkspace({
         <h1 className="font-heading font-semibold text-base" ref={headingRef} tabIndex={-1}>
           Settings
         </h1>
-        <Badge variant="outline">{appSectionActive ? "Application" : viewModel.hostLabel}</Badge>
+        {appSectionActive ? (
+          <Badge variant="outline">Application</Badge>
+        ) : (
+          <HostSelector fallbackLabel={viewModel.hostLabel} selection={hostSelection} />
+        )}
         <p aria-live="polite" className="min-w-0 flex-1 truncate text-end text-muted-foreground text-xs" role="status">
           {announcement}
         </p>
@@ -445,6 +456,7 @@ export function SettingsWorkspace({
         )}
         {!appSectionActive && <ScopeTabs api={api} scopes={scopes} />}
       </header>
+      {!appSectionActive && brokerStatus !== undefined && <BrokerStatusLine {...brokerStatus} />}
       {!appSectionActive && editScope === "session" && scopes.includes("session") && (
         <p className="shrink-0 border-border border-b bg-secondary/40 px-4 py-1.5 text-muted-foreground text-xs" role="note">
           Changes here apply to everything on {viewModel.hostLabel} until OMP restarts. They are

@@ -11,6 +11,12 @@ import {
   type ConnectionStateEvent,
   type ConnectResult,
   type DisconnectResult,
+  type LocalProfileAddRequest,
+  type LocalProfileListResult,
+  type LocalProfileRemoveResult,
+  type LocalProfileRequest,
+  type LocalProfileResult,
+  type LocalProfileUpdateRequest,
   type DesktopUpdateOpenEvent,
   type DesktopUpdateRendererReadyResult,
   type DesktopUpdateState,
@@ -62,6 +68,14 @@ export interface OmpShellBridge {
   readonly removeTarget: (request: TargetRequest) => Promise<TargetRemoveResult>;
   readonly connectTarget: (request: TargetRequest) => Promise<ConnectResult>;
   readonly disconnectTarget: (request: TargetRequest) => Promise<DisconnectResult>;
+  readonly listProfiles: () => Promise<LocalProfileListResult>;
+  readonly addProfile: (request: LocalProfileAddRequest) => Promise<LocalProfileResult>;
+  readonly updateProfile: (request: LocalProfileUpdateRequest) => Promise<LocalProfileResult>;
+  readonly removeProfile: (request: LocalProfileRequest) => Promise<LocalProfileRemoveResult>;
+  readonly profileStatus: (request: LocalProfileRequest) => Promise<LocalProfileResult>;
+  readonly profileStart: (request: LocalProfileRequest) => Promise<LocalProfileResult>;
+  readonly profileStop: (request: LocalProfileRequest) => Promise<LocalProfileResult>;
+  readonly profileRestart: (request: LocalProfileRequest) => Promise<LocalProfileResult>;
   readonly onServerFrame: (listener: (event: RendererServerFrameEvent) => void) => () => void;
   readonly onConnectionState: (listener: (event: ConnectionStateEvent) => void) => () => void;
   readonly onRuntimeError: (listener: (event: RuntimeErrorEvent) => void) => () => void;
@@ -70,7 +84,7 @@ export interface OmpShellBridge {
   readonly onOpenUpdateSettings: (listener: (event: DesktopUpdateOpenEvent) => void) => () => void;
 }
 
-function invoke<C extends "omp:bootstrap" | "omp:connect" | "omp:disconnect" | "omp:command" | "omp:confirm" | "omp:terminal:input" | "omp:terminal:resize" | "omp:terminal:close" | "omp:pair" | "omp:pair-links:drain" | "omp:service:inspect" | "omp:service:install" | "omp:service:start" | "omp:service:stop" | "omp:service:restart" | "omp:service:uninstall" | "omp:targets:list" | "omp:targets:add" | "omp:targets:remove" | "app:update:get-state" | "app:update:check" | "app:update:download" | "app:update:restart" | "app:update:renderer-ready", R>(channel: C, payload: unknown): Promise<R> {
+function invoke<C extends "omp:bootstrap" | "omp:connect" | "omp:disconnect" | "omp:command" | "omp:confirm" | "omp:terminal:input" | "omp:terminal:resize" | "omp:terminal:close" | "omp:pair" | "omp:pair-links:drain" | "omp:service:inspect" | "omp:service:install" | "omp:service:start" | "omp:service:stop" | "omp:service:restart" | "omp:service:uninstall" | "omp:targets:list" | "omp:targets:add" | "omp:targets:remove" | "omp:profiles:list" | "omp:profiles:add" | "omp:profiles:update" | "omp:profiles:remove" | "omp:profiles:status" | "omp:profiles:start" | "omp:profiles:stop" | "omp:profiles:restart" | "app:update:get-state" | "app:update:check" | "app:update:download" | "app:update:restart" | "app:update:renderer-ready", R>(channel: C, payload: unknown): Promise<R> {
   return ipcRenderer.invoke(channel, { channel, payload }) as Promise<R>;
 }
 
@@ -131,6 +145,14 @@ const bridge: OmpShellBridge = {
   removeTarget: (request) => invoke("omp:targets:remove", request),
   connectTarget: (request) => invoke("omp:connect", request),
   disconnectTarget: (request) => invoke("omp:disconnect", request),
+  listProfiles: () => invoke("omp:profiles:list", {}),
+  addProfile: (request) => invoke("omp:profiles:add", request),
+  updateProfile: (request) => invoke("omp:profiles:update", request),
+  removeProfile: (request) => invoke("omp:profiles:remove", request),
+  profileStatus: (request) => invoke("omp:profiles:status", request),
+  profileStart: (request) => invoke("omp:profiles:start", request),
+  profileStop: (request) => invoke("omp:profiles:stop", request),
+  profileRestart: (request) => invoke("omp:profiles:restart", request),
   onServerFrame: (listener) => subscribe("omp:server-frame", listener),
   onConnectionState: (listener) => subscribe("omp:connection-state", listener),
   onRuntimeError: (listener) => subscribe("omp:runtime-error", listener),

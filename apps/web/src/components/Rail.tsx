@@ -31,6 +31,7 @@ import {
   Plus,
   RotateCcw,
   Trash2,
+  UsersRound,
   X,
 } from "lucide-react";
 import {
@@ -59,7 +60,9 @@ import { resolveSessionManagementNavigation } from "../features/session-runtime/
 import { desktopRuntime, useDesktopRuntimeSnapshot } from "../platform/desktop-runtime.ts";
 import {
   deriveWorkspaceData,
+  requiresProfileChoiceForCreate,
   resolveLiveProject,
+  resolveLiveProjectCreateTargets,
   resolveLiveSession,
 } from "../platform/live-workspace.ts";
 import { useWorkspace, workspaceStore } from "../state/store-instance.ts";
@@ -425,11 +428,13 @@ function SessionRowItem({
           showCloseButton={false}
         >
           <DialogHeader>
-            <DialogTitle className="text-base">Terminate runtime for “{session.title}”?</DialogTitle>
+            <DialogTitle className="text-base">
+              Terminate runtime for “{session.title}”?
+            </DialogTitle>
             <DialogDescription>
               This stops the process handling this session and ends any in-flight turn. The
-              transcript, draft, artifacts, and generated output stay intact. Archive or delete
-              only after the host reports the runtime closed.
+              transcript, draft, artifacts, and generated output stay intact. Archive or delete only
+              after the host reports the runtime closed.
             </DialogDescription>
             {error !== null && (
               <p className="text-destructive-foreground text-xs" role="alert">
@@ -547,32 +552,37 @@ function ProjectHeaderRow({
   const controller = desktopRuntime();
   const [pending, setPending] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const disclosureRef = useRef<HTMLButtonElement | null>(null);
 
   const address = snapshot !== null ? resolveLiveProject(snapshot, group.project.id) : null;
+  const createTargets =
+    snapshot === null
+      ? []
+      : resolveLiveProjectCreateTargets(snapshot, group.project.id).filter(
+          (target) => sessionCreateSupport(snapshot, target.address).supported,
+        );
   const createSupport =
-    address !== null && snapshot !== null
-      ? sessionCreateSupport(snapshot, address)
-      : { supported: false, reason: "Connect to this host to create a session" };
-  const canCreate =
-    allowCreate &&
-    createSupport.supported &&
-    controller !== null &&
-    address !== null &&
-    !pending;
+    createTargets.length > 0
+      ? { supported: true, reason: null }
+      : address !== null && snapshot !== null
+        ? sessionCreateSupport(snapshot, address)
+        : { supported: false, reason: "Connect to this host to create a session" };
+  const canCreate = allowCreate && createTargets.length > 0 && controller !== null && !pending;
+  const chooseCreateProfile = requiresProfileChoiceForCreate(createTargets);
   const emptyCurrentProject = view === "current" && group.sessions.length === 0;
   const inventoryTruncated = group.host.sessionInventoryTruncated === true;
   const showProjectMenu = emptyCurrentProject || (view === "archived" && shortcutHidden);
 
   const handleCreate = useCallback(
-    async (event: React.MouseEvent) => {
-      event.stopPropagation();
-      if (!canCreate || controller === null || address === null) return;
+    async (targetAddress: NonNullable<typeof address>) => {
+      if (!canCreate || controller === null) return;
       setPending(true);
       setError(null);
       try {
-        const result = await createLiveSession(controller, address);
+        const result = await createLiveSession(controller, targetAddress);
+        setCreateMenuOpen(false);
         workspaceStore.getState().setRailOverlayOpen(false);
         void navigate({ params: { sessionId: result.viewId }, to: "/sessions/$sessionId" });
       } catch (cause) {
@@ -581,7 +591,7 @@ function ProjectHeaderRow({
         setPending(false);
       }
     },
-    [canCreate, controller, address, pending, navigate],
+    [canCreate, controller, navigate],
   );
 
   return (
@@ -611,6 +621,14 @@ function ProjectHeaderRow({
               <span className="truncate">{group.host.name}</span>
             </span>
           )}
+          {group.host.kind === "local" &&
+            group.host.profileId !== undefined &&
+            group.host.profileId !== "default" && (
+              <span className="flex min-w-0 items-center gap-1 text-muted-foreground text-xs">
+                <UsersRound aria-hidden="true" className="size-3 shrink-0" />
+                <span className="truncate">{group.host.name}</span>
+              </span>
+            )}
           <span className="flex-1" />
           {!group.expanded && group.unreadCount > 0 && (
             <span
@@ -623,7 +641,60 @@ function ProjectHeaderRow({
           )}
           <span className="text-muted-foreground text-xs">{group.sessions.length}</span>
         </button>
-        {allowCreate && (
+        {allowCreate && chooseCreateProfile ? (
+          <Popover.Root onOpenChange={setCreateMenuOpen} open={createMenuOpen}>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Popover.Trigger
+                    aria-label={`Choose an OMP profile for a new session in ${group.project.name}`}
+                    className="flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring sm:size-6"
+                    disabled={!canCreate}
+                  >
+                    {pending ? (
+                      <Spinner className="size-3" />
+                    ) : (
+                      <Plus aria-hidden="true" className="size-3" />
+                    )}
+                  </Popover.Trigger>
+                }
+              />
+              <TooltipPopup side="right">Choose an OMP profile</TooltipPopup>
+            </Tooltip>
+            <Popover.Portal>
+              <Popover.Positioner align="end" className="z-50" side="bottom" sideOffset={4}>
+                <Popover.Popup className="w-[min(15rem,calc(100vw-1rem))] rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-(--overlay-shadow) outline-none">
+                  <Popover.Title className="truncate px-2 pt-1 pb-1.5 font-medium text-muted-foreground text-xs">
+                    Start in {group.project.name}
+                  </Popover.Title>
+                  {createTargets.map((target) => (
+                    <button
+                      className="flex min-h-11 w-full cursor-pointer items-center gap-2 rounded-md px-2 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring sm:min-h-8"
+                      disabled={pending}
+                      key={target.address.targetId}
+                      onClick={() => void handleCreate(target.address)}
+                      type="button"
+                    >
+                      <UsersRound
+                        aria-hidden="true"
+                        className="size-4 shrink-0 text-muted-foreground"
+                      />
+                      <span className="flex min-w-0 flex-1 flex-col py-1">
+                        <span className="truncate text-sm">{target.label}</span>
+                        {target.profileId !== undefined && (
+                          <span className="truncate font-mono text-muted-foreground text-[11px]">
+                            {target.profileId}
+                          </span>
+                        )}
+                      </span>
+                      {target.current && <Badge variant="outline">Current</Badge>}
+                    </button>
+                  ))}
+                </Popover.Popup>
+              </Popover.Positioner>
+            </Popover.Portal>
+          </Popover.Root>
+        ) : allowCreate ? (
           <Tooltip>
             <TooltipTrigger
               render={
@@ -634,7 +705,11 @@ function ProjectHeaderRow({
                     "size-11 shrink-0 sm:size-6",
                     !canCreate && "cursor-not-allowed opacity-64",
                   )}
-                  onClick={handleCreate}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    const target = createTargets[0];
+                    if (target !== undefined) void handleCreate(target.address);
+                  }}
                   size="icon-xs"
                   title={createSupport.reason ?? undefined}
                   variant="ghost"
@@ -651,7 +726,7 @@ function ProjectHeaderRow({
               {createSupport.reason ?? `New session in ${group.project.name}`}
             </TooltipPopup>
           </Tooltip>
-        )}
+        ) : null}
         {showProjectMenu && (
           <Popover.Root onOpenChange={setMenuOpen} open={menuOpen}>
             <Popover.Trigger

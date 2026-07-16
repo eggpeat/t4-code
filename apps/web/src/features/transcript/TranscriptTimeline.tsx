@@ -10,7 +10,7 @@ import { Button, cn } from "@t4-code/ui";
 import { ArrowDown } from "lucide-react";
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
-import { useWorkspace, workspaceStore } from "../../state/store-instance.ts";
+import { workspaceStore } from "../../state/store-instance.ts";
 import { selectSessionView } from "../../state/workspace-store.ts";
 import type { TranscriptImageSource } from "../session-runtime/transcript-images.ts";
 import type { ToolRenderHost } from "./tool-render/types.ts";
@@ -63,11 +63,14 @@ export const TranscriptTimeline = memo(function TranscriptTimeline({
   toolHost,
 }: TranscriptTimelineProps) {
   const listRef = useRef<LegendListRef | null>(null);
-  // null anchor = the user was following the tail when they left.
-  const savedScrollTop = useWorkspace(
-    (state) => selectSessionView(state, sessionId).scrollTop,
+  // null anchor = the user was following the tail when they left. Read the
+  // saved anchor once at mount (the component keys by sessionId): a live
+  // subscription here would re-render the whole list on every scroll event,
+  // because handleScroll below writes this exact key per scroll frame.
+  const [initialAnchor] = useState<number | null>(
+    () => selectSessionView(workspaceStore.getState(), sessionId).scrollTop,
   );
-  const initialAnchorRef = useRef<number | null>(savedScrollTop);
+  const initialAnchorRef = useRef<number | null>(initialAnchor);
   const [atEnd, setAtEnd] = useState(initialAnchorRef.current === null);
   const [newOutputPending, setNewOutputPending] = useState(false);
   // A user disclosure suspends follow-to-bottom: its layout growth must
@@ -139,17 +142,28 @@ export const TranscriptTimeline = memo(function TranscriptTimeline({
         onSettle: () => {
           disclosureActiveRef.current = false;
           setDisclosureActive(false);
+          // LegendList recomputes its at-end signals on scroll events only,
+          // so right after a disclosure resize they can still claim "at end"
+          // while the view now rests well above the max — resuming follow
+          // from that stale flag is the alignment snap (pinToEnd then yanks
+          // the view by the whole expansion height). Measure the scroller
+          // itself: only a view actually at the end resumes following.
+          const scroller = locateScroller();
           const state = listRef.current?.getState();
-          if (state === undefined) return;
-          const isAtEnd = state.isAtEnd || state.isWithinMaintainScrollAtEndThreshold;
+          const isAtEnd =
+            scroller !== null
+              ? scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop <= 1
+              : (state?.isAtEnd ?? false);
           atEndRef.current = isAtEnd;
           setAtEnd(isAtEnd);
-          workspaceStore
-            .getState()
-            .setSessionScrollTop(sessionId, isAtEnd ? null : Math.round(state.scroll));
+          if (state !== undefined) {
+            workspaceStore
+              .getState()
+              .setSessionScrollTop(sessionId, isAtEnd ? null : Math.round(state.scroll));
+          }
         },
       }),
-    [sessionId],
+    [sessionId, locateScroller],
   );
 
   // New output while scrolled away raises the pill.

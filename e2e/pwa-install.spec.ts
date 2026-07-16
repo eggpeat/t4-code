@@ -255,13 +255,9 @@ test("keeps the compaction lifecycle precise inside a 320px viewport", async ({ 
         .querySelector<HTMLElement>('[data-transcript-status="compacting-context"]')
         ?.getBoundingClientRect().right ?? Number.POSITIVE_INFINITY,
   }));
-  expect(geometry).toEqual({
-    clientWidth: 320,
-    documentScrollWidth: 320,
-    bodyScrollWidth: 320,
-    statusRight: expect.any(Number),
-  });
-  expect(geometry.statusRight).toBeLessThanOrEqual(320.5);
+  expect(geometry.documentScrollWidth).toBe(geometry.clientWidth);
+  expect(geometry.bodyScrollWidth).toBe(geometry.clientWidth);
+  expect(geometry.statusRight).toBeLessThanOrEqual(geometry.clientWidth + 0.5);
 
   // Capture the first committed text from the same keyed row. The elapsed
   // child must take the new turn start immediately, not one timer tick later.
@@ -285,6 +281,7 @@ test("keeps the compaction lifecycle precise inside a 320px viewport", async ({ 
     Object.assign(globalThis, { __t4CompactionRerender: { observer, state } });
   });
   await page.clock.runFor(500);
+  await expect(page.locator('[data-transcript-status="working"]')).toHaveCount(1);
 
   const firstWorkingText = await page.evaluate(
     () =>

@@ -47,6 +47,20 @@ export interface LiveProjectAddress {
   readonly projectId: string;
 }
 
+export interface LiveProjectCreateTarget {
+  readonly address: LiveProjectAddress;
+  readonly label: string;
+  readonly profileId?: string;
+  readonly current: boolean;
+}
+
+/** Never make a cross-profile account/model-routing choice silently. */
+export function requiresProfileChoiceForCreate(
+  targets: readonly LiveProjectCreateTarget[],
+): boolean {
+  return targets.length > 1 || (targets.length === 1 && targets[0]?.current === false);
+}
+
 /** Resolve a project view id, rejecting malformed ids and unbound hosts. */
 export function resolveLiveProject(
   snapshot: DesktopRuntimeSnapshot,
@@ -66,6 +80,50 @@ export function resolveLiveProject(
     return null;
   }
   return null;
+}
+
+/**
+ * Resolve every connected local OMP profile that can address the same stable
+ * project id. Named profile appservers share only this opaque id; the renderer
+ * never receives or forwards an absolute cwd. Remote hosts stay pinned to their
+ * original target because equal project ids do not imply equal filesystems.
+ */
+export function resolveLiveProjectCreateTargets(
+  snapshot: DesktopRuntimeSnapshot,
+  viewId: string,
+): readonly LiveProjectCreateTarget[] {
+  const source = resolveLiveProject(snapshot, viewId);
+  if (source === null) return [];
+  const sourceTarget = snapshot.targets.get(source.targetId);
+  if (sourceTarget?.kind !== "local") {
+    return [{ address: source, label: sourceTarget?.label ?? "This host", current: true }];
+  }
+  const candidates: LiveProjectCreateTarget[] = [];
+  for (const target of snapshot.targets.values()) {
+    if (target.kind !== "local" || snapshot.connections.get(target.targetId) !== "connected")
+      continue;
+    const hostId = snapshot.targetHosts.get(target.targetId);
+    if (hostId === undefined) continue;
+    candidates.push({
+      address: { targetId: target.targetId, hostId, projectId: source.projectId },
+      label: target.label,
+      profileId:
+        target.targetId === "local"
+          ? "default"
+          : target.targetId.startsWith("local:")
+            ? target.targetId.slice("local:".length)
+            : target.targetId,
+      current: target.targetId === source.targetId,
+    });
+  }
+  candidates.sort((left, right) => {
+    if (left.current !== right.current) return left.current ? -1 : 1;
+    return (
+      left.label.localeCompare(right.label) ||
+      left.address.targetId.localeCompare(right.address.targetId)
+    );
+  });
+  return candidates;
 }
 /** Warm per-session projection for a view id, when the runtime holds one. */
 export function warmSessionProjection(
@@ -127,6 +185,16 @@ export function deriveWorkspaceData(snapshot: DesktopRuntimeSnapshot): Workspace
       id: hostId,
       name: target?.label ?? "This machine",
       kind: target?.kind ?? "local",
+      ...(target?.kind === "local"
+        ? {
+            profileId:
+              target.targetId === "local"
+                ? "default"
+                : target.targetId.startsWith("local:")
+                  ? target.targetId.slice("local:".length)
+                  : "default",
+          }
+        : {}),
       sessionInventoryTruncated:
         inventoryMetadata === undefined ||
         inventoryMetadata.truncated ||

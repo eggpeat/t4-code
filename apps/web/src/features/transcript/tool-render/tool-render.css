@@ -270,6 +270,10 @@
 }
 
 .tv-render .tv-diff-row {
+  /* Size rows to their content (min 100%) so add/del backgrounds paint the
+     full scroll width when the diff scrolls horizontally on narrow screens. */
+  width: max-content;
+  min-width: 100%;
   padding: 0 0.5625rem;
   white-space: pre;
 }

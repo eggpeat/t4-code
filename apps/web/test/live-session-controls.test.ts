@@ -207,7 +207,7 @@ async function settle(rounds = 12): Promise<void> {
 }
 
 describe("defaults from live host settings", () => {
-  it("shows the renamed default role and auto thinking before session state arrives", async () => {
+  it("keeps semantic controls honest before session state arrives", async () => {
     const { runtime } = await startedRuntime();
     const controls = runtime.getSnapshot().controls;
     // modelTags renames default → "Luna 5.6"; the label follows the host.
@@ -216,8 +216,10 @@ describe("defaults from live host settings", () => {
     expect(controls.thinking).toBe("auto");
     expect(controls.fast).toBe(false);
     expect(controls.modelSupported).toBe(true);
-    expect(controls.thinkingSupported).toBe(true);
-    expect(controls.fastSupported).toBe(true);
+    expect(controls.thinkingSupported).toBe(false);
+    expect(controls.thinkingUnsupportedReason).toContain("does not report");
+    expect(controls.fastSupported).toBe(false);
+    expect(controls.fastUnsupportedReason).toContain("does not report");
   });
 
   it("limits the primary picker to configured Ctrl-P roles in exact cycle order", async () => {
@@ -299,11 +301,29 @@ describe("defaults from live host settings", () => {
     ]);
   });
 
-  it("offers the full thinking ladder", async () => {
-    const { runtime } = await startedRuntime();
-    expect(runtime.getSnapshot().controls.thinkingLevels).toEqual([
-      "auto",
+  it("offers the host-reported thinking ladder and semantic state", async () => {
+    const { runtime, shell } = await startedRuntime();
+    shell.emitFrame({
+      targetId: "local",
+      frame: sessionsUpsert(2, {
+        thinking: "auto",
+        liveState: {
+          thinking: "auto",
+          thinkingEffective: "high",
+          thinkingResolved: "high",
+          thinkingLevels: ["minimal", "low", "medium", "high", "xhigh", "max"],
+          thinkingSupported: true,
+          thinkingOffFloored: false,
+          fast: true,
+          fastAvailable: true,
+          fastActive: true,
+        },
+      }),
+    });
+    const controls = runtime.getSnapshot().controls;
+    expect(controls.thinkingLevels).toEqual([
       "off",
+      "auto",
       "minimal",
       "low",
       "medium",
@@ -311,6 +331,12 @@ describe("defaults from live host settings", () => {
       "xhigh",
       "max",
     ]);
+    expect(controls.thinkingEffective).toBe("high");
+    expect(controls.thinkingResolved).toBe("high");
+    expect(controls.thinkingSupported).toBe(true);
+    expect(controls.fastAvailable).toBe(true);
+    expect(controls.fast).toBe(true);
+    expect(controls.fastActive).toBe(true);
   });
 });
 
