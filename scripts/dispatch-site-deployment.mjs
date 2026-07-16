@@ -68,7 +68,6 @@ function exactRuns(payload, commit, tag, dispatchNonce) {
       run &&
       Number.isSafeInteger(run.id) &&
       run.id > 0 &&
-      run.name === "Deploy project site" &&
       run.path === WORKFLOW_PATH &&
       run.event === "workflow_dispatch" &&
       run.head_sha === commit &&

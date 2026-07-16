@@ -10,7 +10,7 @@ const dispatchNonce = "11111111-1111-4111-8111-111111111111";
 function run(id, overrides = {}) {
   return {
     id,
-    name: "Deploy project site",
+    name: `Deploy project site ${tag} ${dispatchNonce}`,
     path: ".github/workflows/deploy-site.yml",
     event: "workflow_dispatch",
     head_sha: commit,

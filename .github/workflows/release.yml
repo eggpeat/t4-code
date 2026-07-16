@@ -428,10 +428,10 @@ jobs:
       actions: write
       contents: read
     steps:
-      - name: Check out verified release source
+      - name: Check out trusted release-control source for site dispatch
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
         with:
-          ref: ${{ needs.verify.outputs.source_sha }}
+          ref: ${{ github.sha }}
           persist-credentials: false
 
       - name: Install Node.js

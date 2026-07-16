@@ -418,6 +418,9 @@ test("deploys release site source only after artifact publication", () => {
   assert.ok(releaseWorkflow.includes('--tag "$RELEASE_TAG"'));
   assert.ok(releaseWorkflow.includes('--commit "$SOURCE_SHA"'));
   assert.ok(!releaseWorkflow.includes("gh workflow run deploy-site.yml"));
+  const dispatchSite = releaseWorkflow.slice(releaseWorkflow.indexOf("  dispatch-site:"));
+  assert.ok(dispatchSite.includes("ref: ${{ github.sha }}"));
+  assert.ok(!dispatchSite.includes("ref: ${{ needs.verify.outputs.source_sha }}"));
   assert.ok(!releaseWorkflow.includes("--ref main"));
 
   const exactCiWaiter = files.get("scripts/wait-for-exact-ci.mjs");
