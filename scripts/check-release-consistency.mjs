@@ -1,5 +1,6 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import { fileURLToPath } from "node:url";
 
 export const RELEASE_CONTRACT_PATHS = [
@@ -353,6 +354,14 @@ export function collectReleaseConsistencyErrors(files, releaseTag) {
     matrixPath,
     errors,
   );
+  if (
+    releaseTag !== undefined &&
+    !isDeepStrictEqual(matrix?.publishedRuntime, matrix?.verifiedRuntime)
+  ) {
+    errors.push(
+      `${matrixPath} published runtime must exactly match current verified runtime for tagged releases`,
+    );
+  }
   if (releaseTag !== undefined) {
     for (const [field, currentValue, publishedValue] of [
       ["package", matrix?.verifiedRuntime?.package, matrix?.publishedRuntime?.package],

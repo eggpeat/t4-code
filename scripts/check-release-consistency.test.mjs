@@ -90,6 +90,17 @@ test("tagged releases require published provenance to match current contracts", 
       ),
     ),
   );
+
+  const extended = changedRuntime("publishedRuntime", (runtime) => {
+    runtime.artifactSha256 = "0".repeat(64);
+  });
+  assert.ok(
+    collectReleaseConsistencyErrors(extended, "v0.1.22").some((error) =>
+      error.includes(
+        "published runtime must exactly match current verified runtime for tagged releases",
+      ),
+    ),
+  );
 });
 
 test("rejects workspace, site, README, and runtime version drift", () => {
