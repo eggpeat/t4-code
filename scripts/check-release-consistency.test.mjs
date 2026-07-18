@@ -54,10 +54,11 @@ test("current source tree has one consistent release version", () => {
   assert.deepEqual(collectReleaseConsistencyErrors(files), []);
 });
 
-test("keeps verified and published runtime records aligned after promotion", () => {
+test("tracks the current verified runtime separately from published release provenance", () => {
   const matrix = JSON.parse(files.get("compat/omp-app-matrix.json"));
   assert.equal(matrix.verifiedRuntime.sourceTag, "t4code-17.0.4-appserver-4");
-  assert.deepEqual(matrix.publishedRuntime, matrix.verifiedRuntime);
+  assert.equal(matrix.publishedRuntime.sourceTag, "t4code-17.0.0-appserver-6");
+  assert.notEqual(matrix.verifiedRuntime.sourceCommit, matrix.publishedRuntime.sourceCommit);
 });
 
 test("rejects a tag that differs from the package version", () => {
@@ -79,20 +80,23 @@ test("tagged releases require published provenance to match current contracts", 
       ),
     );
   }
-
-  const drifted = changedRuntime("publishedRuntime", (runtime) => {
-    runtime.sourceTag = "wrong-tag";
-  });
-  assert.ok(
-    collectReleaseConsistencyErrors(drifted, "v0.1.22").some((error) =>
-      error.includes(
-        "published runtime tag must match current verified runtime for tagged releases",
+  for (const field of ["version", "commit", "tag", "upstream commit", "integration patches"]) {
+    assert.ok(
+      errors.some((error) =>
+        error.includes(
+          `published runtime ${field} must match current verified runtime for tagged releases`,
+        ),
       ),
-    ),
-  );
+    );
+  }
 
-  const extended = changedRuntime("publishedRuntime", (runtime) => {
-    runtime.artifactSha256 = "0".repeat(64);
+  const extended = changed("compat/omp-app-matrix.json", (text) => {
+    const matrix = JSON.parse(text);
+    matrix.publishedRuntime = {
+      ...matrix.verifiedRuntime,
+      artifactSha256: "0".repeat(64),
+    };
+    return JSON.stringify(matrix);
   });
   assert.ok(
     collectReleaseConsistencyErrors(extended, "v0.1.22").some((error) =>
