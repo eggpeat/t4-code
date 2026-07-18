@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { test } from "node:test";
 
+import { makeCanonicalTemporaryDirectory } from "./test-temporary-directory.mjs";
+
 const repoRoot = resolve(import.meta.dirname, "..");
 const maintainerRoot = resolve(repoRoot, "ops/t4-maintainer");
 const bashPath = "/bin/bash";
@@ -56,7 +58,7 @@ test("maintainer shell entrypoints remain syntactically valid", async () => {
 });
 
 test("runner preflights the configured date helper before creating state", async () => {
-  const scratch = await mkdtemp(join(tmpdir(), "t4-maintainer-date-"));
+  const scratch = await makeCanonicalTemporaryDirectory("t4-maintainer-date-");
   const stateRoot = join(scratch, "state");
   const missingDate = join(scratch, "missing-date");
   await mkdir(stateRoot, { mode: 0o700 });
@@ -78,21 +80,49 @@ test("runner preflights the configured date helper before creating state", async
 });
 
 test("runner preflights the Linux Sol privilege runner before creating state", async () => {
-  const scratch = await mkdtemp(join(tmpdir(), "t4-maintainer-setpriv-"));
+  const scratch = await makeCanonicalTemporaryDirectory("t4-maintainer-setpriv-");
   const stateRoot = join(scratch, "maintainer");
+  const bin = join(scratch, "bin");
+  const realpath = join(bin, "realpath");
   const uname = join(stateRoot, "uname");
   const missingSetpriv = join(stateRoot, "missing-setpriv");
   await mkdir(stateRoot, { mode: 0o700 });
+  await mkdir(bin, { mode: 0o700 });
+  for (const command of [
+    "curl",
+    "dpkg",
+    "dpkg-query",
+    "flock",
+    "gh",
+    "git",
+    "jq",
+    "sha256sum",
+    "systemctl",
+  ]) {
+    await writeFile(join(bin, command), "#!/bin/sh\nexit 0\n", { mode: 0o700 });
+  }
+  await writeFile(
+    realpath,
+    `#!/bin/sh
+[ "\${1:-}" = "-e" ] && shift
+[ "\${1:-}" = "--" ] && shift
+exec "$T4_TEST_NODE" -e 'const fs=require("node:fs");process.stdout.write(fs.realpathSync.native(process.argv[1])+"\\n")' "$1"
+`,
+    { mode: 0o700 },
+  );
   await writeFile(uname, "#!/bin/sh\nprintf 'Linux\\n'\n", { mode: 0o700 });
   try {
     const result = spawnSync(bashPath, [resolve(maintainerRoot, "run.sh")], {
       encoding: "utf8",
       env: {
         ...process.env,
+        PATH: `${bin}:/usr/bin:/bin`,
+        T4_TEST_NODE: process.execPath,
         T4_MAINTAINER_TEST_MODE: "1",
         T4_MAINTAINER_ROOT: stateRoot,
         T4_MAINTAINER_UNAME: uname,
         T4_MAINTAINER_OMP: bashPath,
+        T4_MAINTAINER_NODE: process.execPath,
         T4_MAINTAINER_SETPRIV: missingSetpriv,
       },
     });
