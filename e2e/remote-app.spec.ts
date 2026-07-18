@@ -1,6 +1,6 @@
 import { createServer, type Server } from "node:http";
 import { spawn, type ChildProcess } from "node:child_process";
-import { access, readFile, stat } from "node:fs/promises";
+import { access, readFile, stat, writeFile } from "node:fs/promises";
 import { extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { AddressInfo } from "node:net";
@@ -440,6 +440,7 @@ test("routes mobile session creation to the selected profile and preserves both 
 
 test("@soak mounts the bounded tail of a 10k history on a phone viewport", async ({ page }) => {
   test.setTimeout(120_000);
+  const mountStartedAt = performance.now();
   const historyFixture = new FixtureProcess("history-10k-v1");
   let historyWeb: BuiltWebServer | undefined;
   try {
@@ -448,9 +449,81 @@ test("@soak mounts the bounded tail of a 10k history on a phone viewport", async
     await historyWeb.start();
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto(historyWeb.url, { waitUntil: "domcontentloaded" });
+    const navigationTiming = await page.evaluate(() => {
+      const navigation = performance.getEntriesByType("navigation")[0] as
+        | PerformanceNavigationTiming
+        | undefined;
+      return { domContentLoaded: navigation?.domContentLoadedEventEnd ?? 0 };
+    });
+    const connectedHandle = await page.waitForFunction(
+      (copy) => {
+        const isVisible = (element: Element) => {
+          const style = getComputedStyle(element);
+          const bounds = element.getBoundingClientRect();
+          return style.display !== "none" && style.visibility !== "hidden" && bounds.width > 0 && bounds.height > 0;
+        };
+        const connected = [...document.querySelectorAll("*")].some(
+          (element) => element.textContent?.trim() === copy && isVisible(element),
+        );
+        return connected ? performance.now() : false;
+      },
+      CONNECTED_COPY,
+      { polling: "raf" },
+    );
+    const connectedAt = await connectedHandle.jsonValue();
+    await connectedHandle.dispose();
     await expect(page.getByText(CONNECTED_COPY, { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Show session list", exact: true }).click();
     const rail = page.getByRole("dialog", { name: "Working folders and sessions" });
+    await page.evaluate(() => {
+      const phases: {
+        transcriptVisibleAt?: number;
+        realListVisibleAt?: number;
+        tailPaintedAt?: number;
+      } = {};
+      Object.assign(window, { __t4BrowserPaintPhases: phases });
+      let tailPaintScheduled = false;
+      const isVisible = (element: Element | null) => {
+        if (!(element instanceof HTMLElement)) return false;
+        const style = getComputedStyle(element);
+        const bounds = element.getBoundingClientRect();
+        return style.display !== "none"
+          && style.visibility !== "hidden"
+          && style.opacity !== "0"
+          && bounds.width > 0
+          && bounds.height > 0;
+      };
+      const inspect = () => {
+        const transcript = document.querySelector('[role="log"][aria-label="Transcript"]');
+        if (phases.transcriptVisibleAt === undefined && isVisible(transcript)) {
+          phases.transcriptVisibleAt = performance.now();
+        }
+        const realList = transcript?.querySelector(".legend-list-content-container") ?? null;
+        const overlay = transcript?.querySelector("[data-cold-mount-overlay]") ?? null;
+        if (
+          phases.realListVisibleAt === undefined
+          && isVisible(transcript)
+          && overlay === null
+          && isVisible(realList)
+        ) {
+          phases.realListVisibleAt = performance.now();
+        }
+        const tail = [...(transcript?.querySelectorAll("p") ?? [])].find(
+          (paragraph) => paragraph.textContent?.trim() === "message-10000" && isVisible(paragraph),
+        );
+        if (phases.realListVisibleAt !== undefined && tail !== undefined && !tailPaintScheduled) {
+          tailPaintScheduled = true;
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              phases.tailPaintedAt = performance.now();
+            });
+          });
+        }
+        if (phases.tailPaintedAt === undefined) requestAnimationFrame(inspect);
+      };
+      requestAnimationFrame(inspect);
+    });
+    const sessionClickStartedAt = await page.evaluate(() => performance.now());
     await rail.locator('[data-session-row="host-history/session-history"]').click();
 
     const transcript = page.getByRole("log", { name: "Transcript" });
@@ -458,6 +531,51 @@ test("@soak mounts the bounded tail of a 10k history on a phone viewport", async
     await expect(transcript.locator("[data-cold-mount-overlay]")).toHaveCount(0);
     await expect(transcript.getByText("message-10000", { exact: true })).toBeVisible();
     expect(await transcript.locator("[data-transcript-row]").count()).toBeLessThan(100);
+    const mountDuration = performance.now() - mountStartedAt;
+    const phasesHandle = await page.waitForFunction(
+      () => {
+        const phases = (
+          window as typeof window & {
+            __t4BrowserPaintPhases?: {
+              transcriptVisibleAt?: number;
+              realListVisibleAt?: number;
+              tailPaintedAt?: number;
+            };
+          }
+        ).__t4BrowserPaintPhases;
+        return phases !== undefined
+          && Number.isFinite(phases.transcriptVisibleAt)
+          && Number.isFinite(phases.realListVisibleAt)
+          && Number.isFinite(phases.tailPaintedAt)
+          ? phases
+          : false;
+      },
+      undefined,
+      { polling: "raf" },
+    );
+    const phases = await phasesHandle.jsonValue();
+    await phasesHandle.dispose();
+    if (
+      phases.transcriptVisibleAt === undefined
+      || phases.realListVisibleAt === undefined
+      || phases.tailPaintedAt === undefined
+    ) {
+      throw new Error("browser paint observer returned incomplete phases");
+    }
+    const phaseOutput = process.env.T4_PERF_PHASE_OUTPUT;
+    if (phaseOutput !== undefined) {
+      await writeFile(
+        phaseOutput,
+        `${JSON.stringify({
+          mountDuration,
+          navigationDomContentLoaded: navigationTiming.domContentLoaded,
+          connectedAfterDomContentLoaded: connectedAt - navigationTiming.domContentLoaded,
+          sessionClickToTranscriptVisible: phases.transcriptVisibleAt - sessionClickStartedAt,
+          sessionClickToRealListVisible: phases.realListVisibleAt - sessionClickStartedAt,
+          sessionClickToTailPainted: phases.tailPaintedAt - sessionClickStartedAt,
+        })}\n`,
+      );
+    }
   } finally {
     await historyWeb?.stop();
     await historyFixture.stop();

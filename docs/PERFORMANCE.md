@@ -9,7 +9,7 @@ GPU behavior, or packaging.
 | Command | Measurement | Intended use |
 |---|---|---|
 | `pnpm perf:core` | 10k snapshot ingestion, 10k transcript-row derivation, and 100k bounded events | CPU and heap regressions in runtime projections |
-| `pnpm perf:ui` | End-to-end mount of the bounded tail of the frozen `history-10k-v1` fixture | Browser UI regression signal |
+| `pnpm perf:ui` | End-to-end mount plus browser-renderer phase timings for the bounded tail of the frozen `history-10k-v1` fixture | Browser UI and paint regression signals |
 | `pnpm perf:electron` | Source-build desktop window launch and settled Electron working set | Same-host desktop regression signal |
 | `pnpm perf:compare -- <baseline> <current>` | Median change for matching metrics | Fails when a median regresses by more than 10% |
 
@@ -19,6 +19,18 @@ system, CPU model, CPU count, and memory size. They do not record the machine ho
 non-identifying label such as `T4_PERF_MACHINE_LABEL=hostinger-x64` when several benchmark machines
 need to be distinguished. Raw samples are retained; the comparison uses the median and also reports
 p95.
+
+The UI report keeps the whole-test duration and also separates the browser work into navigation,
+connection after page load, transcript-shell visibility, real-list reveal, and tail paint. The tail
+paint sample is taken after the real list replaces its warm loading copy and two browser animation
+frames have elapsed. These numbers show where a slowdown occurs; they are not a claim about a
+physical display's pixel response time.
+
+`ui.mount-bounded-10k` stops after the original mount assertions, before the paint-only wait and
+phase-file write. `ui.playwright-scenario-instrumented` records the full instrumented test duration
+under a new name so paint instrumentation cannot silently change an existing comparison boundary.
+The mount timer starts with the test body's monotonic `performance.now()` clock. Do not derive it
+from Playwright `TestInfo`: reporter results expose a start time, but the in-test object does not.
 
 When source is mirrored without its Git directory, set `T4_PERF_SOURCE_COMMIT` and
 `T4_PERF_SOURCE_DIRTY` so the report identifies the local source that was transferred.
