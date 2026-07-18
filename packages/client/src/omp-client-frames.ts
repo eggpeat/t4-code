@@ -1,12 +1,29 @@
 import { AppWireError } from "@t4-code/protocol";
-import type { OmpServerEvent } from "./omp-protocol-provider.ts";
+import type { OmpProtocolProvider, OmpServerEvent } from "./omp-protocol-provider.ts";
 
 type ServerEvent<Kind extends OmpServerEvent["kind"]> = Extract<OmpServerEvent, { kind: Kind }>;
 type DurableEvent = ServerEvent<"entry" | "event" | "session.delta">;
+class ProtocolProviderContractError extends Error {
+  constructor() {
+    super("protocol provider returned an undeclared server event");
+    this.name = "ProtocolProviderContractError";
+  }
+}
 export function safeFrameDecodeFailure(error: unknown): string {
+  if (error instanceof ProtocolProviderContractError) return error.message;
   if (!(error instanceof AppWireError)) return "invalid server frame";
   const safePath = error.path !== undefined && /^[A-Za-z0-9.[\]_-]{1,128}$/u.test(error.path) ? ` at ${error.path}` : "";
   return `invalid server frame (${error.code}${safePath})`;
+}
+export function decodeProviderServerEvent(
+  provider: OmpProtocolProvider,
+  input: unknown,
+): OmpServerEvent {
+  const event = provider.decodeServerEvent(input);
+  if (!provider.serverEventKinds.includes(event.kind)) {
+    throw new ProtocolProviderContractError();
+  }
+  return event;
 }
 export interface FrameDispatchHandlers {
   welcome(message: ServerEvent<"welcome">): void;
@@ -46,7 +63,6 @@ export class OmpClientEventDispatcher {
 }
 import type { CursorRecord, OmpClientOptions } from "./omp-client-contracts.ts";
 import { encodeOutgoingMessage } from "./omp-client-outbound.ts";
-import type { OmpProtocolProvider } from "./omp-protocol-provider.ts";
 
 export function sendClientHello(
   provider: OmpProtocolProvider,
