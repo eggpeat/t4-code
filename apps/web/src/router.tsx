@@ -19,12 +19,13 @@ import {
   useNavigate,
   useParams,
 } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 import { AppShell } from "./components/AppShell.tsx";
 import { HomePane } from "./components/HomePane.tsx";
 import { SessionScreen } from "./components/SessionScreen.tsx";
 import { AgentViewScreen } from "./features/agent-view/AgentViewScreen.tsx";
+import { PreviewWorkspace } from "./features/preview/PreviewWorkspace.tsx";
 import { LiveAttentionInbox } from "./features/attention/index.ts";
 import { SettingsWorkspace } from "./features/settings/index.ts";
 import { LiveSettingsScreen } from "./features/settings/LiveSettingsScreen.tsx";
@@ -35,6 +36,7 @@ import {
   type ProfilesPort,
   type TargetsStoreApi,
 } from "./features/targets/targets-store.ts";
+import type { WorkspaceProject, WorkspaceSession } from "./lib/workspace-data.ts";
 import {
   applySessionRoutePendingGrace,
   createSessionRouteActivationGate,
@@ -89,8 +91,17 @@ const inboxRoute = createRoute({
   component: LiveAttentionInbox,
 });
 
-function SessionRoute() {
-  const { sessionId } = useParams({ from: "/sessions/$sessionId" });
+interface SessionRouteGateProps {
+  readonly sessionId: string;
+  readonly previewRoute: boolean;
+  readonly children: (
+    session: WorkspaceSession,
+    project: WorkspaceProject,
+    nowMs: number,
+  ) => ReactNode;
+}
+
+function SessionRouteGate({ children, previewRoute, sessionId }: SessionRouteGateProps) {
   const navigate = useNavigate();
   const [nowMs] = useState(() => Date.now());
   const [pendingTimedOut, setPendingTimedOut] = useState(false);
@@ -113,18 +124,11 @@ function SessionRoute() {
   const pendingKey = rawDecision.kind === "pending" ? sessionId : null;
   const decision = applySessionRoutePendingGrace(rawDecision, pendingTimedOut);
 
-  // Arm grace only when raw route truth enters pending. A healthy session does
-  // not burn its future reconnect grace, and an expired pending route remains
-  // unavailable until raw truth recovers or the route changes.
   useEffect(() => {
     pendingGrace.update(pendingKey);
   }, [pendingGrace, pendingKey]);
   useEffect(() => () => pendingGrace.dispose(), [pendingGrace]);
 
-  // Activation stamps the visit and closes the overlay rail — once per
-  // present route session ID. Streamed projections rebuild `session` on
-  // every output/status update; the gate keeps that churn from re-closing
-  // a rail the user just reopened.
   const [activationGate] = useState(() => createSessionRouteActivationGate());
   useEffect(() => {
     const target = activationGate.resolve(decision, session);
@@ -168,7 +172,13 @@ function SessionRoute() {
     return <Navigate replace to="/" />;
   }
   if (decision.kind === "redirect-session") {
-    return (
+    return previewRoute ? (
+      <Navigate
+        params={{ sessionId: decision.sessionId }}
+        replace
+        to="/sessions/$sessionId/preview"
+      />
+    ) : (
       <Navigate params={{ sessionId: decision.sessionId }} replace to="/sessions/$sessionId" />
     );
   }
@@ -220,14 +230,33 @@ function SessionRoute() {
       </div>
     );
   }
+  return children(session, project, nowMs);
+}
+
+function SessionRoute() {
+  const navigate = useNavigate();
+  const { sessionId } = useParams({ from: "/sessions/$sessionId" });
   return (
-    <SessionScreen
-      key={session.id}
-      nowMs={nowMs}
-      onOpenHostHealth={() => void navigate({ to: "/hosts" })}
-      project={project}
-      session={session}
-    />
+    <SessionRouteGate previewRoute={false} sessionId={sessionId}>
+      {(session, project, nowMs) => (
+        <SessionScreen
+          key={session.id}
+          nowMs={nowMs}
+          onOpenHostHealth={() => void navigate({ to: "/hosts" })}
+          project={project}
+          session={session}
+        />
+      )}
+    </SessionRouteGate>
+  );
+}
+
+function PreviewRoute() {
+  const { sessionId } = useParams({ from: "/sessions/$sessionId/preview" });
+  return (
+    <SessionRouteGate previewRoute sessionId={sessionId}>
+      {(session, project) => <PreviewWorkspace project={project} session={session} />}
+    </SessionRouteGate>
   );
 }
 
@@ -235,6 +264,12 @@ const sessionRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/sessions/$sessionId",
   component: SessionRoute,
+});
+
+const previewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/sessions/$sessionId/preview",
+  component: PreviewRoute,
 });
 
 function AgentViewRoute() {
@@ -405,6 +440,7 @@ const routeTree = rootRoute.addChildren([
   indexRoute,
   inboxRoute,
   sessionRoute,
+  previewRoute,
   agentViewRoute,
   settingsRoute,
   hostsRoute,
