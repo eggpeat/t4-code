@@ -141,15 +141,24 @@ describe("phone touch targets", () => {
     expect(controls).toContain("flex min-h-11 w-full cursor-pointer items-center");
     expect(controls).toContain("flex max-h-[min(24rem,var(--available-height))]");
     expect(controls).toContain("min-h-0 overflow-y-auto overscroll-contain");
-    expect(titlebar.match(/className="size-11 sm:size-7"/g)).toHaveLength(5);
+    expect(titlebar.match(/className="size-11 sm:size-7"/g)).toHaveLength(4);
+    expect(titlebar).toContain('className="hidden size-11 sm:inline-flex sm:size-7"');
+    expect(titlebar).toContain('aria-label="Exit focus mode"');
+    expect(titlebar).toContain("Focus mode</span>");
     const hostedAppAction = readFileSync(
       join(import.meta.dirname, "../src/components/HostedAppAction.tsx"),
       "utf8",
     );
     expect(hostedAppAction).toContain('className="size-11 lg:size-7"');
-    expect(session).toContain('aria-label="Session panels"');
+    expect(session).toContain('aria-label="Workspace tools"');
     expect(session).toContain("flex size-11 shrink-0 cursor-pointer");
+    expect(session).toContain("Session context:");
+    expect(session).toContain("View host health");
     expect(session).toContain("flex min-h-11 w-full cursor-pointer items-center");
+    expect(session).toContain("Agent terminals");
+    expect(session).toContain("⌘J");
+    expect(session).toContain("Enter focus mode");
+    expect(session).toContain("⌘⇧F");
     expect(rail).toContain("flex min-h-11 min-w-0 flex-1 items-center");
     // Project-row create actions are labeled `New`, stay 44px on touch, and
     // announce that the chosen OMP profile owns the session.
