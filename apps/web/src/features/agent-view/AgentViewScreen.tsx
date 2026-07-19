@@ -57,18 +57,23 @@ function AgentCard({
   group,
   nowMs,
   row,
+  sampleMode,
   snapshot,
   onCancel,
 }: {
   readonly group: AgentViewGroup;
   readonly nowMs: number;
   readonly row: AgentViewRow;
-  readonly snapshot: DesktopRuntimeSnapshot;
+  readonly sampleMode: boolean;
+  readonly snapshot: DesktopRuntimeSnapshot | null;
   readonly onCancel: () => void;
 }) {
   const { node } = row;
   const style = AGENT_STATE_STYLES[node.state];
-  const availability = agentCancelAvailability(snapshot, group.viewId, node);
+  const availability =
+    sampleMode || snapshot === null
+      ? { enabled: false, reason: "Sample data is local and cannot stop an agent." }
+      : agentCancelAvailability(snapshot, group.viewId, node);
   const elapsed = node.state === "running" ? formatElapsed(node.startedAt, nowMs) : "";
   const contextPercent =
     node.contextUsed === null || node.contextLimit === null || node.contextLimit === 0
@@ -143,28 +148,43 @@ function AgentCard({
   );
 }
 
-export function AgentViewScreen({
-  controller,
-  snapshot,
-  onBack,
-  onOpenSession,
-}: {
+type AgentViewFixtureProps =
+  | {
+      readonly fixtureGroups?: never;
+      readonly fixtureNowMs?: never;
+    }
+  | {
+      readonly fixtureGroups: readonly AgentViewGroup[];
+      readonly fixtureNowMs: number;
+    };
+
+interface AgentViewScreenProps {
   readonly controller: AgentViewRuntime | null;
   readonly snapshot: DesktopRuntimeSnapshot | null;
   readonly onBack: () => void;
   readonly onOpenSession: (sessionId: string) => void;
-}) {
+}
+
+export function AgentViewScreen({
+  controller,
+  fixtureGroups,
+  fixtureNowMs,
+  snapshot,
+  onBack,
+  onOpenSession,
+}: AgentViewScreenProps & AgentViewFixtureProps) {
   const groups = useMemo(
-    () => (snapshot === null ? [] : deriveAgentViewGroups(snapshot)),
-    [snapshot],
+    () => (snapshot === null ? (fixtureGroups ?? []) : deriveAgentViewGroups(snapshot)),
+    [fixtureGroups, snapshot],
   );
+  const sampleMode = snapshot === null && fixtureGroups !== undefined;
   const agentCount = groups.reduce((sum, group) => sum + group.agents.length, 0);
   const runningCount = groups.reduce(
-    (sum, group) =>
-      sum + group.agents.filter(({ node }) => node.state === "running").length,
+    (sum, group) => sum + group.agents.filter(({ node }) => node.state === "running").length,
     0,
   );
-  const nowMs = useNowTick(runningCount > 0);
+  const liveNowMs = useNowTick(runningCount > 0 && !sampleMode);
+  const nowMs = sampleMode && fixtureNowMs !== undefined ? fixtureNowMs : liveNowMs;
   const [pending, setPending] = useState<PendingCancel | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -211,7 +231,7 @@ export function AgentViewScreen({
         {announcement}
       </p>
 
-      {snapshot === null ? (
+      {snapshot === null && fixtureGroups === undefined ? (
         <Empty className="flex-1 border-0">
           <EmptyHeader>
             <EmptyTitle>Agent View requires the desktop runtime</EmptyTitle>
@@ -282,6 +302,7 @@ export function AgentViewScreen({
                         setPending({ group, row });
                       }}
                       row={row}
+                      sampleMode={sampleMode}
                       snapshot={snapshot}
                     />
                   ))}

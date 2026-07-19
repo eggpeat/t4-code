@@ -25,7 +25,12 @@ import { AppShell } from "./components/AppShell.tsx";
 import { HomePane } from "./components/HomePane.tsx";
 import { SessionScreen } from "./components/SessionScreen.tsx";
 import { AgentViewScreen } from "./features/agent-view/AgentViewScreen.tsx";
+import {
+  AGENT_VIEW_FIXTURE_GROUPS,
+  AGENT_VIEW_FIXTURE_NOW_MS,
+} from "./features/agent-view/fixtures.ts";
 import { PreviewWorkspace } from "./features/preview/PreviewWorkspace.tsx";
+import { FixturePreviewWorkspace } from "./features/preview/FixturePreviewWorkspace.tsx";
 import { LiveAttentionInbox } from "./features/attention/index.ts";
 import { LiveTranscriptSearch } from "./features/transcript-search/index.ts";
 import { TRANSCRIPT_SEARCH_ROUTE } from "./features/transcript-search/route.ts";
@@ -263,7 +268,13 @@ function PreviewRoute() {
   const { sessionId } = useParams({ from: "/sessions/$sessionId/preview" });
   return (
     <SessionRouteGate previewRoute sessionId={sessionId}>
-      {(session, project) => <PreviewWorkspace project={project} session={session} />}
+      {(session, project) =>
+        rendererPlatform.demo ? (
+          <FixturePreviewWorkspace project={project} session={session} />
+        ) : (
+          <PreviewWorkspace project={project} session={session} />
+        )
+      }
     </SessionRouteGate>
   );
 }
@@ -287,6 +298,12 @@ function AgentViewRoute() {
   return (
     <AgentViewScreen
       controller={desktopRuntime()}
+      {...(rendererPlatform.demo
+        ? {
+            fixtureGroups: AGENT_VIEW_FIXTURE_GROUPS,
+            fixtureNowMs: AGENT_VIEW_FIXTURE_NOW_MS,
+          }
+        : {})}
       onBack={() => {
         if (activeSessionId === null) void navigate({ to: "/" });
         else void navigate({ params: { sessionId: activeSessionId }, to: "/sessions/$sessionId" });
