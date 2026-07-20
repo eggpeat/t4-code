@@ -401,7 +401,7 @@ test("proof validation accepts exact run/image/scenario identity and rejects fab
 
   const unauthenticatedSignerClaim = structuredClone(proof);
   unauthenticatedSignerClaim.images[0].provenance.mode = "cosign-keyless";
-  assert.throws(() => validateProofManifest(unauthenticatedSignerClaim), /signature verification/u);
+  assert.throws(() => validateProofManifest(unauthenticatedSignerClaim), /signer verification claim/u);
 
   const extra = structuredClone(proof);
   extra.source.token = "must-not-survive";
