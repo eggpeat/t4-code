@@ -1141,6 +1141,7 @@ describe("app-wire authority", () => {
 			"session.list": "none",
 			"transcript.search": "none",
 			"transcript.context": "none",
+			"transcript.page": "none",
 			"project.reveal": "none",
 			"session.create": "none",
 			"session.attach": "none",
