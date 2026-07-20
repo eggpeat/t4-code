@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vite-plus/test"
+import { describe, expect, it } from "vite-plus/test";
 import { hostId, projectId, revision, sessionId, type SessionRef } from "@t4-code/host-wire";
 import {
 	CLUSTER_MAX_SESSIONS,
@@ -70,7 +70,7 @@ const session = {
 };
 
 describe("Kubernetes infrastructure projection", () => {
-	test("derives a stable host id from the T4ClusterHost UID and bounded list state", () => {
+	it("derives a stable host id from the T4ClusterHost UID and bounded list state", () => {
 		expect(clusterHostIdFromUid(host.metadata.uid)).toBe("cluster:24e7bcb1-c694-4ba4-85c4-70a829f7996b");
 		expect(CLUSTER_MAX_WORKSPACES).toBe(256);
 		expect(CLUSTER_MAX_SESSIONS).toBe(1_000);
@@ -92,7 +92,8 @@ describe("Kubernetes infrastructure projection", () => {
 		expect(JSON.stringify(projection.workspaceList())).not.toContain("pvcRef");
 		expect(JSON.stringify(projection.workspaceList())).not.toContain("repositoryId");
 	});
-	test("keeps workspace cursors separate and reconnect replacement idempotent", () => {
+
+	it("keeps workspace cursors separate and reconnect replacement idempotent", () => {
 		const projection = new ClusterInfrastructureProjection({ epoch: "replica-uid-1", namespace: "development" });
 		projection.replace({ host, workspaces: [workspace], sessions: [session], resourceVersion: "102" });
 		const seen: unknown[] = [];
@@ -114,7 +115,7 @@ describe("Kubernetes infrastructure projection", () => {
 		stop();
 	});
 
-	test("projects routable pod authority and removes deleted sessions without local truth", () => {
+	it("projects routable pod authority and removes deleted sessions without local truth", () => {
 		const projection = new ClusterInfrastructureProjection({ epoch: "replica-uid-1", namespace: "development" });
 		projection.replace({ host, workspaces: [workspace], sessions: [session], resourceVersion: "102" });
 		projection.setSessionAuthority("session-one", authority("omp-session-private"));
@@ -137,7 +138,7 @@ describe("Kubernetes infrastructure projection", () => {
 		expect(projection.sessionRefs()).toEqual([]);
 	});
 
-	test("fails closed at explicit projection limits", () => {
+	it("fails closed at explicit projection limits", () => {
 		const projection = new ClusterInfrastructureProjection({
 			epoch: "replica-uid-1",
 			namespace: "development",

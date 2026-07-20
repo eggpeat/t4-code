@@ -48,6 +48,17 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
+  name: {{ include "t4-cluster.fullname" . }}-session-token-reviewer
+  labels:
+    {{- include "t4-cluster.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [authentication.k8s.io]
+    resources: [tokenreviews]
+    verbs: [create]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
   name: {{ include "t4-cluster.fullname" . }}-storage-reader
   labels:
     {{- include "t4-cluster.labels" . | nindent 4 }}
@@ -71,6 +82,14 @@ metadata:
   labels:
     {{- include "t4-cluster.labels" . | nindent 4 }}
 automountServiceAccountToken: true
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "t4-cluster.fullname" . }}-session
+  labels:
+    {{- include "t4-cluster.labels" . | nindent 4 }}
+automountServiceAccountToken: false
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -116,4 +135,19 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: {{ include "t4-cluster.fullname" . }}-server
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "t4-cluster.fullname" . }}-session-token-reviewer
+  labels:
+    {{- include "t4-cluster.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "t4-cluster.fullname" . }}-session
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "t4-cluster.fullname" . }}-session-token-reviewer
 {{- end }}

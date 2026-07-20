@@ -51,7 +51,6 @@ export interface ClusterGatewayOptions {
 	readonly projection: ClusterInfrastructureProjection;
 	readonly connector: PodHostConnector;
 	readonly mutations: GatewayMutationBackend;
-	readonly internalToken: string;
 	readonly ciProvider?: CiProvider;
 	readonly appserverVersion?: string;
 	readonly appserverBuild?: string;
@@ -104,7 +103,6 @@ export class ClusterGateway {
 		this.#ci = options.ciProvider;
 		this.#version = options.appserverVersion ?? "0.1.30";
 		this.#build = options.appserverBuild ?? "cluster";
-		if (options.internalToken.length < 32) throw new Error("cluster internal token is invalid");
 	}
 	get connectionCount(): number { return this.#connections.size; }
 	get draining(): boolean { return this.#draining; }

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vite-plus/test"
+import { describe, expect, it } from "vite-plus/test";
 import { WoodpeckerProvider, mapWoodpeckerPipeline } from "../src/woodpecker.ts";
 
 const correlation = {
@@ -33,7 +33,7 @@ function provider(fetch: typeof globalThis.fetch) {
 }
 
 describe("bounded Woodpecker provider", () => {
-	test("maps only allowlisted categorical pipeline state and canonical HTTPS links", () => {
+	it("maps only allowlisted categorical pipeline state and canonical HTTPS links", () => {
 		expect(mapWoodpeckerPipeline(pipeline, correlation, "https://ci.example.test/repos/owner/t4-code/pipeline/42")).toEqual({
 			provider: "woodpecker",
 			correlation: "exact",
@@ -53,7 +53,7 @@ describe("bounded Woodpecker provider", () => {
 		] as const) expect(mapWoodpeckerPipeline({ ...pipeline, status: raw }, correlation).status).toBe(mapped);
 	});
 
-	test("queries exact repository/ref/commit/session correlation and deduplicates before trigger", async () => {
+	it("queries exact repository/ref/commit/session correlation and deduplicates before trigger", async () => {
 		const requests: Array<{ url: string; init?: RequestInit }> = [];
 		const fetch = (async (input: string | URL | Request, init?: RequestInit) => {
 			requests.push({ url: String(input), init });
@@ -67,7 +67,7 @@ describe("bounded Woodpecker provider", () => {
 		expect(JSON.stringify(result)).not.toContain("secret-from-kubernetes");
 	});
 
-	test("ignores approximate matches, triggers once with server-resolved URL, and re-queries before retry", async () => {
+	it("ignores approximate matches, triggers once with server-resolved URL, and re-queries before retry", async () => {
 		const requests: Array<{ url: string; init?: RequestInit }> = [];
 		let query = 0;
 		const fetch = (async (input: string | URL | Request, init?: RequestInit) => {
@@ -94,7 +94,7 @@ describe("bounded Woodpecker provider", () => {
 		expect(requests.filter(request => request.init?.method === "POST")).toHaveLength(1);
 	});
 
-	test("fails closed for unconfigured repositories, insecure provider URLs, oversized replies, and unknown correlation", async () => {
+	it("fails closed for unconfigured repositories, insecure provider URLs, oversized replies, and unknown correlation", async () => {
 		expect(() => new WoodpeckerProvider({ baseUrl: "http://ci.example.test", token: "secret", repositories: {} })).toThrow("HTTPS");
 		const fetch = (async () => Response.json(Array.from({ length: 101 }, () => pipeline))) as typeof globalThis.fetch;
 		await expect(provider(fetch).query(correlation)).rejects.toThrow("pipeline response limit");

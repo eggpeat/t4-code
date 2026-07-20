@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vite-plus/test"
+import { describe, expect, it } from "vite-plus/test";
 import {
 	ClusterMetrics,
 	ClusterServerHealth,
@@ -9,7 +9,7 @@ import {
 import { isLoopbackAddress } from "../src/server.ts";
 
 describe("cluster-server observability", () => {
-	test("redacts credentials, prompt content, pairing data, and private paths recursively", () => {
+	it("redacts credentials, prompt content, pairing data, and private paths recursively", () => {
 		const redacted = redactStructuredValue({
 			component: "cluster-server",
 			session: "session-one",
@@ -35,7 +35,7 @@ describe("cluster-server observability", () => {
 		expect(JSON.parse(lines[0] ?? "{}")).toMatchObject({ level: "info", message: "ci lookup", provider: "woodpecker", token: "[REDACTED]" });
 	});
 
-	test("serves separate health/readiness and bounded metrics without a remote drain route", async () => {
+	it("serves separate health/readiness and bounded metrics without a remote drain route", async () => {
 		const health = new ClusterServerHealth();
 		const metrics = new ClusterMetrics({ component: "cluster-server", version: "test" });
 		const handler = createAdminHandler({ health, metrics });
@@ -57,7 +57,7 @@ describe("cluster-server observability", () => {
 		expect((await handler(new Request("http://admin/readyz"))).status).toBe(200);
 	});
 
-	test("recognizes only kernel loopback sources for the preStop drain route", () => {
+	it("recognizes only kernel loopback sources for the preStop drain route", () => {
 		expect(isLoopbackAddress("127.0.0.1")).toBe(true);
 		expect(isLoopbackAddress("127.42.0.7")).toBe(true);
 		expect(isLoopbackAddress("::1")).toBe(true);
@@ -65,7 +65,7 @@ describe("cluster-server observability", () => {
 		expect(isLoopbackAddress("fd7a:115c:a1e0::1")).toBe(false);
 	});
 
-	test("rejects unbounded or secret-like metric labels", () => {
+	it("rejects unbounded or secret-like metric labels", () => {
 		const metrics = new ClusterMetrics({ component: "cluster-server", version: "test" });
 		expect(() => metrics.increment("bad-name", {})).toThrow("metric name");
 		expect(() => metrics.increment("valid_metric", { token: "secret" })).toThrow("metric label");

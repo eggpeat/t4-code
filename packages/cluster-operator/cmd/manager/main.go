@@ -36,16 +36,16 @@ func managerOptions() ctrl.Options {
 	renewDeadline := 20 * time.Second
 	retryPeriod := 5 * time.Second
 	options := ctrl.Options{
-		Scheme: scheme,
-		Metrics: metricsserver.Options{BindAddress: ":8080"},
-		HealthProbeBindAddress: ":8081",
-		LeaderElection: true,
-		LeaderElectionResourceLock: "leases",
-		LeaderElectionID: "t4-cluster-operator.cluster.t4.dev",
+		Scheme:                        scheme,
+		Metrics:                       metricsserver.Options{BindAddress: ":8080"},
+		HealthProbeBindAddress:        ":8081",
+		LeaderElection:                true,
+		LeaderElectionResourceLock:    "leases",
+		LeaderElectionID:              "t4-cluster-operator.cluster.t4.dev",
 		LeaderElectionReleaseOnCancel: true,
-		LeaseDuration: &leaseDuration,
-		RenewDeadline: &renewDeadline,
-		RetryPeriod: &retryPeriod,
+		LeaseDuration:                 &leaseDuration,
+		RenewDeadline:                 &renewDeadline,
+		RetryPeriod:                   &retryPeriod,
 	}
 	if namespace := strings.TrimSpace(os.Getenv("POD_NAMESPACE")); namespace != "" {
 		options.Cache = cache.Options{DefaultNamespaces: map[string]cache.Config{namespace: {}}}
@@ -62,48 +62,74 @@ func main() {
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&zapOptions)))
 
 	manager, err := ctrl.NewManager(ctrl.GetConfigOrDie(), managerOptions())
-	if err != nil { ctrl.Log.Error(err, "unable to create controller manager"); os.Exit(1) }
+	if err != nil {
+		ctrl.Log.Error(err, "unable to create controller manager")
+		os.Exit(1)
+	}
 	if err := (&controllers.ClusterHostReconciler{Client: manager.GetClient(), Scheme: manager.GetScheme()}).SetupWithManager(manager); err != nil {
-		ctrl.Log.Error(err, "unable to register T4ClusterHost controller"); os.Exit(1)
+		ctrl.Log.Error(err, "unable to register T4ClusterHost controller")
+		os.Exit(1)
 	}
 	if err := (&controllers.WorkspaceReconciler{Client: manager.GetClient(), Scheme: manager.GetScheme()}).SetupWithManager(manager); err != nil {
-		ctrl.Log.Error(err, "unable to register T4Workspace controller"); os.Exit(1)
+		ctrl.Log.Error(err, "unable to register T4Workspace controller")
+		os.Exit(1)
 	}
 	excludedNodes := splitNonempty(os.Getenv("T4_SESSION_EXCLUDED_NODES"))
+	sessionServiceAccount, serverServiceAccount := sessionServiceAccountNames()
 	if err := (&controllers.SessionReconciler{
 		Client: manager.GetClient(), Scheme: manager.GetScheme(),
-		RuntimeImage: os.Getenv("T4_SESSION_RUNTIME_IMAGE"),
-		InternalAuthSecret: envOr("T4_INTERNAL_AUTH_SECRET", controllers.DefaultInternalAuthSecret),
-		ExcludedNodeNames: excludedNodes,
+		RuntimeImage:              os.Getenv("T4_SESSION_RUNTIME_IMAGE"),
+		SessionServiceAccountName: sessionServiceAccount,
+		ServerServiceAccountName:  serverServiceAccount,
+		ExcludedNodeNames:         excludedNodes,
 		Resources: corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{
-				corev1.ResourceCPU: apiresource.MustParse(envOr("T4_SESSION_REQUEST_CPU", "500m")),
+				corev1.ResourceCPU:    apiresource.MustParse(envOr("T4_SESSION_REQUEST_CPU", "500m")),
 				corev1.ResourceMemory: apiresource.MustParse(envOr("T4_SESSION_REQUEST_MEMORY", "1Gi")),
 			},
 			Limits: corev1.ResourceList{
-				corev1.ResourceCPU: apiresource.MustParse(envOr("T4_SESSION_LIMIT_CPU", "4")),
+				corev1.ResourceCPU:    apiresource.MustParse(envOr("T4_SESSION_LIMIT_CPU", "4")),
 				corev1.ResourceMemory: apiresource.MustParse(envOr("T4_SESSION_LIMIT_MEMORY", "8Gi")),
 			},
 		},
 		SharedMemorySize: apiresource.MustParse(envOr("T4_SESSION_SHM_SIZE", "1Gi")),
-		TemporarySize: apiresource.MustParse(envOr("T4_SESSION_TEMPORARY_SIZE", "2Gi")),
+		TemporarySize:    apiresource.MustParse(envOr("T4_SESSION_TEMPORARY_SIZE", "2Gi")),
 	}).SetupWithManager(manager); err != nil {
-		ctrl.Log.Error(err, "unable to register T4Session controller"); os.Exit(1)
+		ctrl.Log.Error(err, "unable to register T4Session controller")
+		os.Exit(1)
 	}
-	if err := manager.AddHealthzCheck("healthz", healthz.Ping); err != nil { ctrl.Log.Error(err, "unable to install health check"); os.Exit(1) }
-	if err := manager.AddReadyzCheck("readyz", healthz.Ping); err != nil { ctrl.Log.Error(err, "unable to install readiness check"); os.Exit(1) }
-	if err := manager.Start(ctrl.SetupSignalHandler()); err != nil { ctrl.Log.Error(err, "controller manager stopped"); os.Exit(1) }
+	if err := manager.AddHealthzCheck("healthz", healthz.Ping); err != nil {
+		ctrl.Log.Error(err, "unable to install health check")
+		os.Exit(1)
+	}
+	if err := manager.AddReadyzCheck("readyz", healthz.Ping); err != nil {
+		ctrl.Log.Error(err, "unable to install readiness check")
+		os.Exit(1)
+	}
+	if err := manager.Start(ctrl.SetupSignalHandler()); err != nil {
+		ctrl.Log.Error(err, "controller manager stopped")
+		os.Exit(1)
+	}
 }
 
 func splitNonempty(value string) []string {
 	var result []string
 	for _, item := range strings.Split(value, ",") {
-		if item = strings.TrimSpace(item); item != "" { result = append(result, item) }
+		if item = strings.TrimSpace(item); item != "" {
+			result = append(result, item)
+		}
 	}
 	return result
 }
 
+func sessionServiceAccountNames() (string, string) {
+	return envOr("T4_SESSION_SERVICE_ACCOUNT", controllers.DefaultSessionServiceAccount),
+		envOr("T4_CLUSTER_SERVER_SERVICE_ACCOUNT", controllers.DefaultServerServiceAccount)
+}
+
 func envOr(name, fallback string) string {
-	if value := strings.TrimSpace(os.Getenv(name)); value != "" { return value }
+	if value := strings.TrimSpace(os.Getenv(name)); value != "" {
+		return value
+	}
 	return fallback
 }

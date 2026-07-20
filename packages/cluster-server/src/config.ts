@@ -1,4 +1,5 @@
-import { readFile } from "node:fs/promises";
+import { open } from "node:fs/promises";
+import { isAbsolute } from "node:path";
 import { isIP } from "node:net";
 
 const DNS_LABEL = /^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$/u;
@@ -12,7 +13,8 @@ export interface ClusterServerConfig {
 	readonly kubernetesBaseUrl: string;
 	readonly kubernetesTokenPath: string;
 	readonly kubernetesCaPath: string;
-	readonly internalToken: string;
+	readonly identityTokenPath: string;
+	readonly serverServiceAccountName: string;
 	readonly trustedProxyAddresses: readonly string[];
 	readonly trustedProxyCidrs: readonly string[];
 	readonly woodpecker?: {
@@ -34,6 +36,10 @@ function port(value: string | undefined, fallback: number, name: string): number
 	const result = Number(value ?? fallback);
 	if (!Number.isSafeInteger(result) || result < 1 || result > 65_535) throw new Error(`${name} is invalid`);
 	return result;
+}
+function absolutePath(value: string, name: string): string {
+	if (!isAbsolute(value)) throw new Error(`${name} must be absolute`);
+	return value;
 }
 function repositories(value: string): Readonly<Record<string, { readonly slug: string }>> {
 	if (new TextEncoder().encode(value).byteLength > 65_536) throw new Error("T4_WOODPECKER_REPOSITORIES exceeds limit");
@@ -101,8 +107,8 @@ export function clusterServerConfigFromEnv(env: Readonly<Record<string, string |
 	if (!/^[A-Za-z0-9-]{8,128}$/u.test(podUid)) throw new Error("POD_UID is invalid");
 	const serviceHost = required(env, "KUBERNETES_SERVICE_HOST");
 	const servicePort = port(env.KUBERNETES_SERVICE_PORT_HTTPS ?? env.KUBERNETES_SERVICE_PORT, 443, "KUBERNETES_SERVICE_PORT");
-	const internalToken = required(env, "T4_CLUSTER_INTERNAL_TOKEN");
-	if (new TextEncoder().encode(internalToken).byteLength < 32 || internalToken.length > 16_384) throw new Error("T4_CLUSTER_INTERNAL_TOKEN is invalid");
+	const identityTokenPath = absolutePath(required(env, "T4_CLUSTER_IDENTITY_TOKEN_FILE"), "T4_CLUSTER_IDENTITY_TOKEN_FILE");
+	const serverServiceAccountName = dns(required(env, "T4_CLUSTER_SERVER_SERVICE_ACCOUNT"), "T4_CLUSTER_SERVER_SERVICE_ACCOUNT");
 	const woodpeckerValues = [env.T4_WOODPECKER_BASE_URL, env.T4_WOODPECKER_TOKEN, env.T4_WOODPECKER_REPOSITORIES];
 	if (woodpeckerValues.some(Boolean) && !woodpeckerValues.every(Boolean)) throw new Error("Woodpecker configuration must be complete");
 	return {
@@ -115,9 +121,10 @@ export function clusterServerConfigFromEnv(env: Readonly<Record<string, string |
 		trustedProxyAddresses: proxyAddresses(env.T4_CLUSTER_TRUSTED_PROXY_ADDRESSES),
 		trustedProxyCidrs: proxyCidrs(env.T4_CLUSTER_TRUSTED_PROXY_CIDRS),
 		kubernetesBaseUrl: `https://${serviceHost}:${servicePort}`,
-		kubernetesTokenPath: env.T4_KUBERNETES_TOKEN_PATH ?? "/var/run/secrets/kubernetes.io/serviceaccount/token",
-		kubernetesCaPath: env.T4_KUBERNETES_CA_PATH ?? "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
-		internalToken,
+		kubernetesTokenPath: absolutePath(env.T4_KUBERNETES_TOKEN_PATH ?? "/var/run/secrets/kubernetes.io/serviceaccount/token", "T4_KUBERNETES_TOKEN_PATH"),
+		kubernetesCaPath: absolutePath(env.T4_KUBERNETES_CA_PATH ?? "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt", "T4_KUBERNETES_CA_PATH"),
+		identityTokenPath,
+		serverServiceAccountName,
 		...(woodpeckerValues.every(Boolean) ? {
 			woodpecker: {
 				baseUrl: woodpeckerValues[0]!, token: woodpeckerValues[1]!, repositories: repositories(woodpeckerValues[2]!),
@@ -125,9 +132,30 @@ export function clusterServerConfigFromEnv(env: Readonly<Record<string, string |
 		} : {}),
 	};
 }
+export async function readBoundedRegularFile(path: string, maximumBytes: number, description: string): Promise<string> {
+	const file = await open(path, "r");
+	try {
+		const metadata = await file.stat();
+		if (!metadata.isFile() || metadata.size < 1 || metadata.size > maximumBytes) throw new Error(`${description} file is invalid`);
+		const value = await file.readFile("utf8");
+		if (new TextEncoder().encode(value).byteLength > maximumBytes) throw new Error(`${description} file is invalid`);
+		return value;
+	} finally {
+		await file.close();
+	}
+}
+export async function readClusterIdentityToken(path: string): Promise<string> {
+	const token = (await readBoundedRegularFile(path, 16_384, "cluster identity token")).trim();
+	if (new TextEncoder().encode(token).byteLength < 32 || /\s/u.test(token)) throw new Error("cluster identity token file is invalid");
+	return token;
+}
 export async function loadKubernetesCredentials(config: ClusterServerConfig): Promise<{ token: string; ca: string }> {
-	const [token, ca] = await Promise.all([readFile(config.kubernetesTokenPath, "utf8"), readFile(config.kubernetesCaPath, "utf8")]);
-	if (!token.trim() || token.length > 16_384) throw new Error("Kubernetes token file is invalid");
-	if (!ca.includes("BEGIN CERTIFICATE") || ca.length > 1024 * 1024) throw new Error("Kubernetes CA file is invalid");
-	return { token: token.trim(), ca };
+	const [rawToken, ca] = await Promise.all([
+		readBoundedRegularFile(config.kubernetesTokenPath, 16_384, "Kubernetes token"),
+		readBoundedRegularFile(config.kubernetesCaPath, 1024 * 1024, "Kubernetes CA"),
+	]);
+	const token = rawToken.trim();
+	if (!token || /\s/u.test(token)) throw new Error("Kubernetes token file is invalid");
+	if (!ca.includes("BEGIN CERTIFICATE")) throw new Error("Kubernetes CA file is invalid");
+	return { token, ca };
 }

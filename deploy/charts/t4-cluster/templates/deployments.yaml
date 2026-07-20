@@ -73,8 +73,10 @@ spec:
               valueFrom: {fieldRef: {fieldPath: metadata.namespace}}
             - name: T4_SESSION_RUNTIME_IMAGE
               value: {{ include "t4-cluster.image" .Values.images.sessionRuntime }}
-            - name: T4_INTERNAL_AUTH_SECRET
-              value: {{ .Values.internalAuth.secretName }}
+            - name: T4_SESSION_SERVICE_ACCOUNT
+              value: {{ include "t4-cluster.fullname" . }}-session
+            - name: T4_CLUSTER_SERVER_SERVICE_ACCOUNT
+              value: {{ include "t4-cluster.fullname" . }}-server
             - name: T4_SESSION_EXCLUDED_NODES
               value: {{ join "," .Values.session.nodeExclude | quote }}
             - name: T4_SESSION_REQUEST_CPU
@@ -202,17 +204,20 @@ spec:
               value: "9090"
             - name: T4_CLUSTER_HOST_NAME
               value: {{ .Values.clusterHost.name }}
+            - name: T4_CLUSTER_IDENTITY_TOKEN_FILE
+              value: /var/run/secrets/t4-cluster-identity/token
+            - name: T4_CLUSTER_SERVER_SERVICE_ACCOUNT
+              value: {{ include "t4-cluster.fullname" . }}-server
+            - name: T4_KUBERNETES_TOKEN_PATH
+              value: /var/run/secrets/kubernetes.io/serviceaccount/token
+            - name: T4_KUBERNETES_CA_PATH
+              value: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
             - name: POD_NAMESPACE
               valueFrom: {fieldRef: {fieldPath: metadata.namespace}}
             - name: POD_NAME
               valueFrom: {fieldRef: {fieldPath: metadata.name}}
             - name: POD_UID
               valueFrom: {fieldRef: {fieldPath: metadata.uid}}
-            - name: T4_CLUSTER_INTERNAL_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.internalAuth.secretName }}
-                  key: token
             {{- if .Values.woodpecker.existingSecret }}
             - name: T4_WOODPECKER_TOKEN
               valueFrom:
@@ -265,7 +270,18 @@ spec:
           volumeMounts:
             - name: temporary
               mountPath: /tmp
+            - name: cluster-identity
+              mountPath: /var/run/secrets/t4-cluster-identity
+              readOnly: true
       volumes:
+        - name: cluster-identity
+          projected:
+            defaultMode: 0440
+            sources:
+              - serviceAccountToken:
+                  audience: t4-cluster-internal
+                  expirationSeconds: 600
+                  path: token
         - name: temporary
           emptyDir:
             sizeLimit: 256Mi

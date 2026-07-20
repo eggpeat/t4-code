@@ -63,10 +63,6 @@ storage:
   # Required when enabled. The administrator creates this backend-neutral RWX StorageClass.
   adminRWXStorageClass: ""
 
-internalAuth:
-  # Fixed default shared by the gateway and controller-created session pods.
-  secretName: t4-cluster-internal-auth
-
 woodpecker:
   existingSecret: ""
   tokenKey: token

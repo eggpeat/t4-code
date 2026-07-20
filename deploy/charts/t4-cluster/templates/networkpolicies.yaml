@@ -110,6 +110,13 @@ spec:
       ports:
         - {protocol: TCP, port: 8787}
   egress:
+    {{- range .Values.networkPolicy.kubernetesApiCIDRs }}
+    - to:
+        - ipBlock: {cidr: {{ . | quote }}}
+      ports:
+        - {protocol: TCP, port: 443}
+        - {protocol: TCP, port: 6443}
+    {{- end }}
     {{- range .Values.networkPolicy.modelRouteCIDRs }}
     - to:
         - ipBlock: {cidr: {{ . | quote }}}

@@ -3479,7 +3479,10 @@ export class LocalAppserver implements AppserverHandle {
 				return;
 			}
 			if (typeof raw !== "string") throw new Error("binary websocket frames are not supported");
-			const frame = decodeClientFrame(parseBounded(raw));
+			const input = parseBounded(raw);
+			const frame = ws.remote && this.#remotePolicy?.decodeClientFrame
+				? this.#remotePolicy.decodeClientFrame(input)
+				: decodeClientFrame(input);
 			if (frame.type === "command" && frame.command === "session.attach") attachingSessionId = frame.sessionId;
 			if (frame.type === "hello") {
 				if (this.#hello.has(ws)) throw new Error("hello already received");

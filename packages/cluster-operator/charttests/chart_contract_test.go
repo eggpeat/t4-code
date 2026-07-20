@@ -68,6 +68,37 @@ func TestRBACSeparatesControllerMutationFromServerProjection(t *testing.T) {
 	}
 }
 
+func TestChartUsesOnlyProjectedServiceAccountIdentityForInternalPeers(t *testing.T) {
+	output := helmTemplate(t, enabledValues()...)
+	assertCount(t, output, "kind: ServiceAccount", 3)
+	assertCount(t, output, "kind: Secret", 0)
+	server := documentContainingKind(t, output, "Deployment", "name: release-name-t4-cluster-server")
+	assertContains(t, server,
+		"serviceAccountName: release-name-t4-cluster-server",
+		"name: T4_CLUSTER_IDENTITY_TOKEN_FILE",
+		"/var/run/secrets/t4-cluster-identity/token",
+		"serviceAccountToken:",
+		"audience: t4-cluster-internal",
+		"expirationSeconds: 600",
+	)
+	controller := documentContainingKind(t, output, "Deployment", "name: release-name-t4-cluster-controller")
+	assertContains(t, controller,
+		"name: T4_SESSION_SERVICE_ACCOUNT",
+		"value: release-name-t4-cluster-session",
+		"name: T4_CLUSTER_SERVER_SERVICE_ACCOUNT",
+		"value: release-name-t4-cluster-server",
+	)
+	sessionRole := documentContainingKind(t, output, "ClusterRole", "name: release-name-t4-cluster-session-token-reviewer")
+	assertContains(t, sessionRole,
+		"apiGroups: [authentication.k8s.io]",
+		"resources: [tokenreviews]",
+		"verbs: [create]",
+	)
+	if strings.Count(sessionRole, "- apiGroups:") != 1 || strings.Contains(sessionRole, "get") || strings.Contains(sessionRole, "list") || strings.Contains(sessionRole, "watch") {
+		t.Fatalf("session ServiceAccount received permissions beyond TokenReview create:\n%s", sessionRole)
+	}
+}
+
 func TestNetworkPoliciesDefaultDenyAndAllowOnlyDeclaredFlows(t *testing.T) {
 	output := helmTemplate(t, append(enabledValues(),
 		"--set", "networkPolicy.kubernetesApiCIDRs[0]=192.0.2.10/32",
@@ -82,6 +113,8 @@ func TestNetworkPoliciesDefaultDenyAndAllowOnlyDeclaredFlows(t *testing.T) {
 		"port: 53",
 		"port: 8787",
 	)
+	sessionPolicy := documentContainingKind(t, output, "NetworkPolicy", "name: release-name-t4-cluster-session-host")
+	assertContains(t, sessionPolicy, "192.0.2.10/32", "port: 443", "port: 6443")
 	if strings.Contains(output, "0.0.0.0/0") {
 		t.Fatal("network policy contains broad Internet egress")
 	}
@@ -126,6 +159,13 @@ func TestImageContractsArePinnedAndAuthorityCompatible(t *testing.T) {
 		"Xvfb",
 	)
 	assertContains(t, server, "packages/cluster-server/src/main.ts")
+	entrypoint := mustRead(t, filepath.Join(root, "cluster", "images", "session-runtime", "session-entrypoint.sh"))
+	assertContains(t, entrypoint,
+		"T4_CLUSTER_SERVER_SERVICE_ACCOUNT",
+		"/var/run/secrets/kubernetes.io/serviceaccount/token",
+		"/var/run/secrets/kubernetes.io/serviceaccount/ca.crt",
+		"/var/run/secrets/kubernetes.io/serviceaccount/namespace",
+	)
 }
 
 func helmTemplate(t *testing.T, extra ...string) string {
@@ -192,5 +232,16 @@ func documentContaining(t *testing.T, rendered, needle string) string {
 		}
 	}
 	t.Fatalf("no rendered document contains %q", needle)
+	return ""
+}
+
+func documentContainingKind(t *testing.T, rendered, kind, needle string) string {
+	t.Helper()
+	for _, document := range strings.Split(rendered, "\n---") {
+		if strings.Contains(document, "kind: "+kind+"\n") && strings.Contains(document, needle) {
+			return document
+		}
+	}
+	t.Fatalf("no rendered %s contains %q", kind, needle)
 	return ""
 }

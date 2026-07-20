@@ -1,4 +1,5 @@
-import { createHash } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
+import { isAbsolute } from "node:path";
 import type {
 	ClusterSessionCreateArguments,
 	ClusterWorkspaceCreateArguments,
@@ -10,9 +11,12 @@ import {
 	type KubernetesResource,
 	type KubernetesWatchEvent,
 } from "./kubernetes-projection.ts";
+import { readBoundedRegularFile } from "./config.ts";
 
 const API_PREFIX = "/apis/cluster.t4.dev/v1alpha1";
+const TOKEN_REVIEW_PATH = "/apis/authentication.k8s.io/v1/tokenreviews";
 const MAX_WATCH_LINE_BYTES = 1024 * 1024;
+export const CLUSTER_INTERNAL_AUDIENCE = "t4-cluster-internal";
 
 export interface KubernetesApiClientOptions {
 	readonly baseUrl: string;
@@ -177,6 +181,84 @@ export class KubernetesApiClient {
 		const request = { ...init, headers } as RequestInit & { tls?: { ca?: string } };
 		if (this.#ca) request.tls = { ca: this.#ca };
 		return this.#fetch(`${this.baseUrl}${path}`, request);
+	}
+}
+
+export interface KubernetesTokenReviewerOptions {
+	readonly baseUrl: string;
+	readonly tokenPath: string;
+	readonly caPath: string;
+	readonly namespacePath: string;
+	readonly serverServiceAccountName: string;
+	readonly timeoutMs?: number;
+	readonly fetch?: typeof globalThis.fetch;
+}
+
+/** Validates a projected server identity through the Kubernetes authentication authority. */
+export class KubernetesTokenReviewer {
+	readonly #baseUrl: string;
+	readonly #tokenPath: string;
+	readonly #caPath: string;
+	readonly #namespacePath: string;
+	readonly #serverServiceAccountName: string;
+	readonly #timeoutMs: number;
+	readonly #fetch: typeof globalThis.fetch;
+
+	constructor(options: KubernetesTokenReviewerOptions) {
+		this.#baseUrl = exactHttpsBase(options.baseUrl);
+		if (![options.tokenPath, options.caPath, options.namespacePath].every(isAbsolute)) throw new Error("Kubernetes projected credential paths must be absolute");
+		this.#tokenPath = options.tokenPath;
+		this.#caPath = options.caPath;
+		this.#namespacePath = options.namespacePath;
+		if (!/^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$/u.test(options.serverServiceAccountName)) throw new Error("cluster server ServiceAccount name is invalid");
+		this.#serverServiceAccountName = options.serverServiceAccountName;
+		this.#timeoutMs = options.timeoutMs ?? 5_000;
+		if (!Number.isSafeInteger(this.#timeoutMs) || this.#timeoutMs < 100 || this.#timeoutMs > 30_000) throw new Error("TokenReview timeout is invalid");
+		this.#fetch = options.fetch ?? globalThis.fetch;
+	}
+
+	async review(presentedToken: string): Promise<boolean> {
+		try {
+			const presentedBytes = new TextEncoder().encode(presentedToken).byteLength;
+			if (presentedBytes < 32 || presentedBytes > 16_384 || /\s/u.test(presentedToken)) return false;
+			const [rawReviewerToken, ca, rawNamespace] = await Promise.all([
+				readBoundedRegularFile(this.#tokenPath, 16_384, "Kubernetes reviewer token"),
+				readBoundedRegularFile(this.#caPath, 1024 * 1024, "Kubernetes CA"),
+				readBoundedRegularFile(this.#namespacePath, 256, "Kubernetes namespace"),
+			]);
+			const reviewerToken = rawReviewerToken.trim();
+			const namespace = safeNamespace(rawNamespace.trim());
+			if (!reviewerToken || /\s/u.test(reviewerToken) || !ca.includes("BEGIN CERTIFICATE")) return false;
+			const headers = new Headers({ accept: "application/json", authorization: `Bearer ${reviewerToken}`, "content-type": "application/json" });
+			const request = {
+				method: "POST",
+				headers,
+				body: JSON.stringify({
+					apiVersion: "authentication.k8s.io/v1",
+					kind: "TokenReview",
+					spec: { token: presentedToken, audiences: [CLUSTER_INTERNAL_AUDIENCE] },
+				}),
+				signal: AbortSignal.timeout(this.#timeoutMs),
+				tls: { ca },
+			} as RequestInit & { tls: { ca: string } };
+			const response = await this.#fetch(`${this.#baseUrl}${TOKEN_REVIEW_PATH}`, request);
+			if (!response.ok) return false;
+			let body: unknown;
+			try { body = await response.json(); } catch { return false; }
+			const root = object(body);
+			if (root.apiVersion !== "authentication.k8s.io/v1" || root.kind !== "TokenReview") return false;
+			const status = object(root.status);
+			if (status.authenticated !== true || Object.hasOwn(status, "error")) return false;
+			const user = object(status.user);
+			if (typeof user.username !== "string") return false;
+			const expectedUsername = `system:serviceaccount:${namespace}:${this.#serverServiceAccountName}`;
+			const expectedBytes = Buffer.from(expectedUsername, "utf8");
+			const actualBytes = Buffer.from(user.username, "utf8");
+			if (expectedBytes.length !== actualBytes.length || !timingSafeEqual(expectedBytes, actualBytes)) return false;
+			return Array.isArray(status.audiences) && status.audiences.length === 1 && status.audiences[0] === CLUSTER_INTERNAL_AUDIENCE;
+		} catch {
+			return false;
+		}
 	}
 }
 

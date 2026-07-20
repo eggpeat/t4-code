@@ -3,6 +3,8 @@ package main
 import (
 	"testing"
 	"time"
+
+	"github.com/LycaonLLC/t4-code/packages/cluster-operator/controllers"
 )
 
 func TestManagerUsesLeaseLeaderElection(t *testing.T) {
@@ -21,5 +23,20 @@ func TestManagerUsesLeaseLeaderElection(t *testing.T) {
 	}
 	if *options.LeaseDuration < 15*time.Second || *options.RenewDeadline >= *options.LeaseDuration || *options.RetryPeriod >= *options.RenewDeadline {
 		t.Fatalf("unsafe leader-election timing: lease=%v renew=%v retry=%v", *options.LeaseDuration, *options.RenewDeadline, *options.RetryPeriod)
+	}
+}
+
+func TestManagerConfiguresDedicatedSessionAndServerServiceAccounts(t *testing.T) {
+	t.Setenv("T4_SESSION_SERVICE_ACCOUNT", "release-session")
+	t.Setenv("T4_CLUSTER_SERVER_SERVICE_ACCOUNT", "release-server")
+	session, server := sessionServiceAccountNames()
+	if session != "release-session" || server != "release-server" {
+		t.Fatalf("ServiceAccounts = %q/%q", session, server)
+	}
+	t.Setenv("T4_SESSION_SERVICE_ACCOUNT", "")
+	t.Setenv("T4_CLUSTER_SERVER_SERVICE_ACCOUNT", "")
+	session, server = sessionServiceAccountNames()
+	if session != controllers.DefaultSessionServiceAccount || server != controllers.DefaultServerServiceAccount {
+		t.Fatalf("default ServiceAccounts = %q/%q", session, server)
 	}
 }

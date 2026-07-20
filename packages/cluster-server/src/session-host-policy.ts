@@ -1,6 +1,6 @@
-import { createHash, timingSafeEqual } from "node:crypto";
 import { isAbsolute } from "node:path";
 import {
+	decodeClientFrame,
 	requiredCapability,
 	type ClientFrame,
 	type HelloFrame,
@@ -13,41 +13,59 @@ import type {
 import type { RemoteConnection } from "@t4-code/host-service";
 
 const SESSION_NAME = /^[a-z0-9](?:[-a-z0-9]{0,61}[a-z0-9])?$/u;
+const INTERNAL_TOKEN_PLACEHOLDER = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+const MAX_PROJECTED_TOKEN_BYTES = 16_384;
 interface ConnectionGrant { capabilities: Set<string>; features: Set<string>; }
+export interface ClusterIdentityReviewer {
+	review(token: string): Promise<boolean>;
+}
 export interface ClusterInternalRemotePolicyOptions {
-	readonly token: string;
+	readonly reviewer: ClusterIdentityReviewer;
 	readonly supportedCapabilities: readonly string[];
 	readonly supportedFeatures: readonly string[];
 }
 
-/** Converts the mounted secret to the canonical 32-byte base64url token used by omp-app/1. */
-export function canonicalInternalDeviceToken(secret: string): string {
-	if (new TextEncoder().encode(secret).byteLength < 32 || secret.length > 16_384) throw new Error("cluster internal token is invalid");
-	return createHash("sha256").update(secret, "utf8").digest("base64url");
+function projectedToken(value: unknown): string {
+	if (typeof value !== "string") throw new Error("cluster identity token is invalid");
+	const bytes = new TextEncoder().encode(value).byteLength;
+	if (bytes < 32 || bytes > MAX_PROJECTED_TOKEN_BYTES || /\s/u.test(value)) throw new Error("cluster identity token is invalid");
+	return value;
 }
-function sameToken(expectedSecret: string, supplied: string): boolean {
-	try {
-		const expected = Buffer.from(canonicalInternalDeviceToken(expectedSecret));
-		const canonical = /^[A-Za-z0-9_-]{43}$/u.test(supplied) ? supplied : canonicalInternalDeviceToken(supplied);
-		const actual = Buffer.from(canonical);
-		return expected.length === actual.length && timingSafeEqual(expected, actual);
-	} catch { return false; }
+export function decodeClusterInternalClientFrame(input: unknown): ClientFrame {
+	if (!input || typeof input !== "object" || Array.isArray(input)) return decodeClientFrame(input);
+	const source = input as Record<string, unknown>;
+	if (source.type !== "hello" || !source.authentication || typeof source.authentication !== "object" || Array.isArray(source.authentication))
+		return decodeClientFrame(input);
+	const authentication = source.authentication as Record<string, unknown>;
+	const token = projectedToken(authentication.deviceToken);
+	const decoded = decodeClientFrame({ ...source, authentication: { ...authentication, deviceToken: INTERNAL_TOKEN_PLACEHOLDER } });
+	if (decoded.type !== "hello" || !decoded.authentication) throw new Error("cluster identity authentication is required");
+	return { ...decoded, authentication: { ...decoded.authentication, deviceToken: token } };
 }
 
 export class ClusterInternalRemotePolicy implements RemoteConnectionPolicy {
-	readonly #token: string;
+	readonly #reviewer: ClusterIdentityReviewer;
 	readonly #capabilities: readonly string[];
 	readonly #features: readonly string[];
 	readonly #connections = new Map<string, ConnectionGrant>();
 	constructor(options: ClusterInternalRemotePolicyOptions) {
-		canonicalInternalDeviceToken(options.token);
-		this.#token = options.token;
+		this.#reviewer = options.reviewer;
 		this.#capabilities = [...new Set(options.supportedCapabilities)].filter(value => value !== "ci.trigger");
 		this.#features = [...new Set(options.supportedFeatures)].filter(value => value !== "cluster.operator");
 	}
+	decodeClientFrame(input: unknown): ClientFrame { return decodeClusterInternalClientFrame(input); }
 	async authenticate(connection: RemoteConnection, hello: HelloFrame): Promise<RemoteHelloDecision> {
 		const authentication = hello.authentication;
-		if (connection.peer.identity.nodeId !== "cluster-server" || authentication?.deviceId !== "cluster-server" || !sameToken(this.#token, authentication.deviceToken)) {
+		if (connection.peer.identity.nodeId !== "cluster-server" || authentication?.deviceId !== "cluster-server") {
+			this.#connections.delete(connection.connectionId);
+			return { authenticated: false, authentication: "denied", grantedCapabilities: [], grantedFeatures: [] };
+		}
+		try {
+			if (!await this.#reviewer.review(authentication.deviceToken)) {
+				this.#connections.delete(connection.connectionId);
+				return { authenticated: false, authentication: "denied", grantedCapabilities: [], grantedFeatures: [] };
+			}
+		} catch {
 			this.#connections.delete(connection.connectionId);
 			return { authenticated: false, authentication: "denied", grantedCapabilities: [], grantedFeatures: [] };
 		}
@@ -74,22 +92,50 @@ export class ClusterInternalRemotePolicy implements RemoteConnectionPolicy {
 }
 
 export interface SessionHostConfig {
-	readonly internalToken: string;
+	readonly kubernetesBaseUrl: string;
+	readonly kubernetesTokenPath: string;
+	readonly kubernetesCaPath: string;
+	readonly kubernetesNamespacePath: string;
+	readonly serverServiceAccountName: string;
 	readonly sessionName: string;
 	readonly ompExecutable: string;
 	readonly stateRoot: string;
 	readonly port: number;
 }
+function required(env: Readonly<Record<string, string | undefined>>, name: string): string {
+	const value = env[name];
+	if (!value) throw new Error(`${name} is required`);
+	return value;
+}
+function dns(value: string, name: string): string {
+	if (!SESSION_NAME.test(value)) throw new Error(`${name} is invalid`);
+	return value;
+}
+function absolutePath(value: string, name: string): string {
+	if (!isAbsolute(value)) throw new Error(`${name} must be absolute`);
+	return value;
+}
 export function sessionHostConfigFromEnv(env: Readonly<Record<string, string | undefined>>): SessionHostConfig {
-	const internalToken = env.T4_CLUSTER_INTERNAL_TOKEN ?? "";
-	canonicalInternalDeviceToken(internalToken);
-	const sessionName = env.T4_SESSION_NAME ?? "";
-	if (!SESSION_NAME.test(sessionName)) throw new Error("T4_SESSION_NAME is invalid");
+	const serviceHost = required(env, "KUBERNETES_SERVICE_HOST");
+	const servicePort = Number(env.KUBERNETES_SERVICE_PORT_HTTPS ?? env.KUBERNETES_SERVICE_PORT ?? "443");
+	if (!Number.isSafeInteger(servicePort) || servicePort < 1 || servicePort > 65_535) throw new Error("KUBERNETES_SERVICE_PORT is invalid");
+	const serverServiceAccountName = dns(required(env, "T4_CLUSTER_SERVER_SERVICE_ACCOUNT"), "T4_CLUSTER_SERVER_SERVICE_ACCOUNT");
+	const sessionName = dns(required(env, "T4_SESSION_NAME"), "T4_SESSION_NAME");
 	const ompExecutable = env.T4_OMP_EXECUTABLE ?? "/opt/t4/bin/omp";
 	if (!isAbsolute(ompExecutable)) throw new Error("T4_OMP_EXECUTABLE must be absolute");
 	const stateRoot = env.T4_SESSION_STATE_ROOT ?? `/workspace/.t4/sessions/${sessionName}`;
 	if (stateRoot !== `/workspace/.t4/sessions/${sessionName}`) throw new Error("T4_SESSION_STATE_ROOT must select the isolated session directory");
 	const port = Number(env.T4_SESSION_HOST_PORT ?? "8787");
 	if (!Number.isSafeInteger(port) || port < 1 || port > 65_535) throw new Error("T4_SESSION_HOST_PORT is invalid");
-	return { internalToken, sessionName, ompExecutable, stateRoot, port };
+	return {
+		kubernetesBaseUrl: `https://${serviceHost}:${servicePort}`,
+		kubernetesTokenPath: absolutePath(env.T4_KUBERNETES_TOKEN_PATH ?? "/var/run/secrets/kubernetes.io/serviceaccount/token", "T4_KUBERNETES_TOKEN_PATH"),
+		kubernetesCaPath: absolutePath(env.T4_KUBERNETES_CA_PATH ?? "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt", "T4_KUBERNETES_CA_PATH"),
+		kubernetesNamespacePath: absolutePath(env.T4_KUBERNETES_NAMESPACE_PATH ?? "/var/run/secrets/kubernetes.io/serviceaccount/namespace", "T4_KUBERNETES_NAMESPACE_PATH"),
+		serverServiceAccountName,
+		sessionName,
+		ompExecutable,
+		stateRoot,
+		port,
+	};
 }

@@ -1,5 +1,13 @@
-import { describe, expect, test } from "vite-plus/test"
-import { hostId, projectId, revision, sessionId, type ClientFrame, type ServerFrame, type SessionRef } from "@t4-code/host-wire";
+import { describe, expect, it } from "vite-plus/test";
+import {
+	hostId,
+	projectId,
+	revision,
+	sessionId,
+	type ClientFrame,
+	type ServerFrame,
+	type SessionRef,
+} from "@t4-code/host-wire";
 import { ClusterGateway, type GatewayClient, type GatewayMutationBackend } from "../src/gateway.ts";
 import { ClusterInfrastructureProjection } from "../src/kubernetes-projection.ts";
 import type { PodHostConnection, PodHostConnector, PodHostRoute } from "../src/pod-host-router.ts";
@@ -91,7 +99,7 @@ function setup(epoch = "replica-uid-1") {
 	projection.setSessionAuthority("session-two", authority("omp-private-two"));
 	const connector = new MemoryConnector();
 	const mutations = new MemoryMutations();
-	const gateway = new ClusterGateway({ projection, connector, mutations, internalToken: "x".repeat(32) });
+	const gateway = new ClusterGateway({ projection, connector, mutations });
 	const client = new MemoryClient();
 	const connection = gateway.connect(client, PRINCIPAL);
 	return { projection, connector, mutations, gateway, client, connection };
@@ -108,7 +116,7 @@ const hello = {
 };
 
 describe("stateless omp-app cluster gateway", () => {
-	test("negotiates cluster.operator, bootstraps one canonical inventory, and changes epoch on replica restart", async () => {
+	it("negotiates cluster.operator, bootstraps one canonical inventory, and changes epoch on replica restart", async () => {
 		const first = setup("replica-uid-1");
 		await first.connection.receive(hello);
 		expect(first.client.frames.map(frame => frame.type)).toEqual(["welcome", "sessions"]);
@@ -126,7 +134,7 @@ describe("stateless omp-app cluster gateway", () => {
 		expect((second.client.frames[1] as { sessions: unknown[] }).sessions).toHaveLength(2);
 	});
 
-	test("returns workspace bootstrap with its independent cursor and streams each watch revision once", async () => {
+	it("returns workspace bootstrap with its independent cursor and streams each watch revision once", async () => {
 		const value = setup();
 		await value.connection.receive(hello);
 		await value.connection.receive({
@@ -145,7 +153,7 @@ describe("stateless omp-app cluster gateway", () => {
 		expect(value.client.frames.filter(frame => frame.type === "workspace.state")).toHaveLength(1);
 	});
 
-	test("routes to exactly one pod host, rewrites only address ids, and preserves attach output order", async () => {
+	it("routes to exactly one pod host, rewrites only address ids, and preserves attach output order", async () => {
 		const value = setup();
 		await value.connection.receive(hello);
 		await value.connection.receive({
@@ -178,7 +186,7 @@ describe("stateless omp-app cluster gateway", () => {
 		});
 	});
 
-	test("denies a preview id learned from another session without opening a second upstream socket", async () => {
+	it("denies a preview id learned from another session without opening a second upstream socket", async () => {
 		const value = setup();
 		await value.connection.receive(hello);
 		await value.connection.receive({
@@ -198,7 +206,7 @@ describe("stateless omp-app cluster gateway", () => {
 		expect(value.client.frames.at(-1)).toMatchObject({ type: "response", commandId: "command-preview", ok: false, error: { code: "NOT_AUTHORIZED" } });
 	});
 
-	test("uses bounded command idempotency while CR mutation identity survives reconnect", async () => {
+	it("uses bounded command idempotency while CR mutation identity survives reconnect", async () => {
 		const value = setup();
 		await value.connection.receive(hello);
 		const command = {

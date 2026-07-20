@@ -11,6 +11,7 @@ import {
 } from "@t4-code/host-service";
 import { hostId } from "@t4-code/host-wire";
 import { ClusterInternalRemotePolicy, sessionHostConfigFromEnv, type SessionHostConfig } from "./session-host-policy.ts";
+import { KubernetesTokenReviewer } from "./kubernetes-client.ts";
 
 const OMP_VERSION = "17.0.5";
 const OMP_COMMIT = "8476f4451ed95c5d5401785d279a93d3c659fac4";
@@ -68,7 +69,13 @@ export async function runSessionHost(
 			rpcChildInvocation: { executable: config.ompExecutable, prefixArgv: [] },
 		};
 		const policy = new ClusterInternalRemotePolicy({
-			token: config.internalToken,
+			reviewer: new KubernetesTokenReviewer({
+				baseUrl: config.kubernetesBaseUrl,
+				tokenPath: config.kubernetesTokenPath,
+				caPath: config.kubernetesCaPath,
+				namespacePath: config.kubernetesNamespacePath,
+				serverServiceAccountName: config.serverServiceAccountName,
+			}),
 			supportedCapabilities: appserverSupportedCapabilities(base),
 			supportedFeatures: appserverSupportedFeatures(base, true),
 		});

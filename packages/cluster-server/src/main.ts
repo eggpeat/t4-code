@@ -33,6 +33,7 @@ export async function runClusterServer(env: Readonly<Record<string, string | und
 			logger.warn("Kubernetes watch reconnecting", { condition: error instanceof Error ? error.name : "unknown", result: "failure" });
 		},
 	});
+
 	const stopped = Promise.withResolvers<void>();
 	const stop = (): void => stopped.resolve();
 	let authority: SessionAuthorityRunner | undefined;
@@ -40,7 +41,7 @@ export async function runClusterServer(env: Readonly<Record<string, string | und
 	let signalsInstalled = false;
 	try {
 		await runner.start();
-		const connector = new WebSocketPodHostConnector({ internalToken: config.internalToken });
+		const connector = new WebSocketPodHostConnector({ identityTokenFile: config.identityTokenPath });
 		authority = new SessionAuthorityRunner({
 			projection,
 			connector,
@@ -52,7 +53,6 @@ export async function runClusterServer(env: Readonly<Record<string, string | und
 			projection,
 			connector,
 			mutations: new KubernetesGatewayMutationBackend({ client: kubernetes, hostRef: config.hostName }),
-			internalToken: config.internalToken,
 			...(ciProvider ? { ciProvider } : {}),
 		});
 		servers = startClusterHttpServers({

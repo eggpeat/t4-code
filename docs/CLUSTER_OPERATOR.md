@@ -79,7 +79,7 @@ helm upgrade --install t4-cluster deploy/charts/t4-cluster --namespace t4-system
 
 The controller always has two replicas and uses a Kubernetes Lease named from `t4-cluster-operator.cluster.t4.dev`; one replica reconciles at a time. The server defaults to three stateless replicas and supports a minimum of two. Its Deployment uses `maxUnavailable: 0`, a `minAvailable: 2` PDB, topology spread, anti-affinity, readiness draining, and an explicit `k3s-worker-02` exclusion. Session pods also exclude that node by default. Additional cluster-specific exclusions belong in deployment values, not this portable chart.
 
-The chart creates `t4-cluster-internal-auth` on first enabled install and retains its token across upgrades. The token is mounted only into the gateway and one-session pods. It is used by the existing `omp-app/1` upstream hello and must never appear in a URL, header, CR, log, or client frame.
+The chart creates dedicated server and session ServiceAccounts instead of a shared credential Secret. Each server pod receives a 10-minute projected token with the fixed `t4-cluster-internal` audience and presents it only in the existing `omp-app/1` upstream authentication field when dialing a session host. Session pods use `automountServiceAccountToken: false`; their only Kubernetes identity mount is an explicit short-lived API-audience token plus the cluster CA and namespace. The session ServiceAccount may only create `authentication.k8s.io/tokenreviews`, and the host accepts a connection only when TokenReview confirms the expected server ServiceAccount username and audience.
 
 ## API configuration
 
@@ -101,7 +101,7 @@ The optional initial prompt is referenced by Secret name and key `prompt`; the S
 
 The session runtime verifies and builds the exact OMP tag `t4code-17.0.5-appserver-10` at commit `8476f4451ed95c5d5401785d279a93d3c659fac4`. It preserves `t4-omp-authority/1`, starts the existing T4 session-host entrypoint, and provides Xvfb, a minimal window manager, and Chromium without privileged mode or host display access. The shared claim is mounted at `/workspace`; authority and browser state live in controller-selected per-session subdirectories. `/dev/shm` is an explicit memory-backed volume. Browser Preview remains the existing GUI stream and control surface.
 
-Session pods do not receive ServiceAccount tokens. All containers drop capabilities, disallow privilege escalation, use RuntimeDefault seccomp, and use read-only root filesystems. No per-session NodePort, LoadBalancer, host network, host PID, host display, or hostPath is created.
+Session pods do not receive an automatically mounted ServiceAccount token. The explicit projected reviewer token can only create TokenReviews and is not resource-authorized. All containers drop capabilities, disallow privilege escalation, use RuntimeDefault seccomp, and use read-only root filesystems. No per-session NodePort, LoadBalancer, host network, host PID, host display, or hostPath is created.
 
 ## Upgrade and rollback
 
@@ -125,7 +125,6 @@ Do not roll OMP independently of the T4 session runtime. Roll back the known-com
 2. Delete `T4Session` resources and wait for their pods and Services to be removed.
 3. Review every `T4Workspace` retention policy. `Delete` removes its PVC; `Retain` deliberately leaves an orphaned PVC for administrator recovery.
 4. Run `helm uninstall t4-cluster --namespace t4-system`.
-5. After no session pod remains, delete the retained `t4-cluster-internal-auth` Secret if the installation will not be restored.
-6. Remove retained PVCs only after their contents have been recovered or confirmed disposable.
+5. Remove retained PVCs only after their contents have been recovered or confirmed disposable.
 
 CRDs are not removed by `helm uninstall`. This preserves custom resources and retained storage across rollback/reinstall. Remove the three CRDs only as a separate, explicit administrative operation after confirming no instances remain; CRD deletion removes all instances regardless of their retention intent.

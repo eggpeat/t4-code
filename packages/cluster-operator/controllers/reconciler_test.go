@@ -169,8 +169,8 @@ func TestSessionWaitsForBoundRWXThenCreatesExactlyOnePodAndService(t *testing.T)
 	workspace.Status.Phase = clusterv1alpha1.InfrastructurePending
 	pvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{Name: workspace.Status.PVCName, Namespace: "team"},
-		Spec: corev1.PersistentVolumeClaimSpec{AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany}},
-		Status: corev1.PersistentVolumeClaimStatus{Phase: corev1.ClaimPending},
+		Spec:       corev1.PersistentVolumeClaimSpec{AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany}},
+		Status:     corev1.PersistentVolumeClaimStatus{Phase: corev1.ClaimPending},
 	}
 	session := testSession()
 	c := fake.NewClientBuilder().WithScheme(scheme).
@@ -203,7 +203,7 @@ func TestSessionWaitsForBoundRWXThenCreatesExactlyOnePodAndService(t *testing.T)
 	}
 	pod := pods.Items[0]
 	if pod.Spec.AutomountServiceAccountToken == nil || *pod.Spec.AutomountServiceAccountToken {
-		t.Fatal("session pod must not mount a service account token")
+		t.Fatal("session pod must disable automatic ServiceAccount token mounting")
 	}
 	if pod.Spec.Containers[0].Image != r.RuntimeImage {
 		t.Fatalf("controller did not use administrator-owned runtime image: %q", pod.Spec.Containers[0].Image)
@@ -213,6 +213,45 @@ func TestSessionWaitsForBoundRWXThenCreatesExactlyOnePodAndService(t *testing.T)
 	}
 	if !hasMount(pod.Spec.Containers[0].VolumeMounts, "workspace", "/workspace") || !hasMount(pod.Spec.Containers[0].VolumeMounts, "shared-memory", "/dev/shm") {
 		t.Fatalf("session mounts = %#v", pod.Spec.Containers[0].VolumeMounts)
+	}
+	if pod.Spec.ServiceAccountName != controllers.DefaultSessionServiceAccount {
+		t.Fatalf("session ServiceAccount = %q", pod.Spec.ServiceAccountName)
+	}
+	serverIdentity := ""
+	for _, env := range pod.Spec.Containers[0].Env {
+		if env.ValueFrom != nil && env.ValueFrom.SecretKeyRef != nil {
+			t.Fatalf("session environment references a credential Secret: %#v", env)
+		}
+		if env.Name == "T4_CLUSTER_SERVER_SERVICE_ACCOUNT" {
+			serverIdentity = env.Value
+		}
+	}
+	if serverIdentity != controllers.DefaultServerServiceAccount {
+		t.Fatalf("expected server ServiceAccount = %q", serverIdentity)
+	}
+	if !hasMount(pod.Spec.Containers[0].VolumeMounts, "kubernetes-api-access", "/var/run/secrets/kubernetes.io/serviceaccount") {
+		t.Fatal("explicit Kubernetes reviewer projection is not mounted")
+	}
+	var projection *corev1.ProjectedVolumeSource
+	for _, volume := range pod.Spec.Volumes {
+		if volume.Name == "kubernetes-api-access" {
+			projection = volume.Projected
+		}
+	}
+	if projection == nil || len(projection.Sources) != 3 {
+		t.Fatalf("Kubernetes reviewer projection = %#v", projection)
+	}
+	serviceToken := projection.Sources[0].ServiceAccountToken
+	if serviceToken == nil || serviceToken.Audience != controllers.KubernetesAPIAudience || serviceToken.ExpirationSeconds == nil || *serviceToken.ExpirationSeconds != controllers.SessionReviewerTokenExpirationSeconds || serviceToken.Path != "token" {
+		t.Fatalf("reviewer token projection = %#v", serviceToken)
+	}
+	clusterCA := projection.Sources[1].ConfigMap
+	if clusterCA == nil || clusterCA.Name != "kube-root-ca.crt" || len(clusterCA.Items) != 1 || clusterCA.Items[0].Key != "ca.crt" || clusterCA.Items[0].Path != "ca.crt" {
+		t.Fatalf("cluster CA projection = %#v", clusterCA)
+	}
+	namespace := projection.Sources[2].DownwardAPI
+	if namespace == nil || len(namespace.Items) != 1 || namespace.Items[0].Path != "namespace" || namespace.Items[0].FieldRef == nil || namespace.Items[0].FieldRef.FieldPath != "metadata.namespace" {
+		t.Fatalf("namespace projection = %#v", namespace)
 	}
 }
 
@@ -253,13 +292,13 @@ func testScheme(t *testing.T) *runtime.Scheme {
 func testHost() *clusterv1alpha1.T4ClusterHost {
 	return &clusterv1alpha1.T4ClusterHost{
 		ObjectMeta: metav1.ObjectMeta{Name: "host-a", Namespace: "team", UID: "host-uid"},
-		Spec: clusterv1alpha1.T4ClusterHostSpec{StorageClassName: "portable-rwx", RuntimeProfiles: []string{"default"}},
+		Spec:       clusterv1alpha1.T4ClusterHostSpec{StorageClassName: "portable-rwx", RuntimeProfiles: []string{"default"}},
 	}
 }
 
 func rwxStorageClass() *storagev1.StorageClass {
 	return &storagev1.StorageClass{
-		ObjectMeta: metav1.ObjectMeta{Name: "portable-rwx", Annotations: map[string]string{clusterv1alpha1.RWXStorageClassAnnotation: string(corev1.ReadWriteMany)}},
+		ObjectMeta:  metav1.ObjectMeta{Name: "portable-rwx", Annotations: map[string]string{clusterv1alpha1.RWXStorageClassAnnotation: string(corev1.ReadWriteMany)}},
 		Provisioner: "example.invalid/csi",
 	}
 }
@@ -276,7 +315,7 @@ func testWorkspace(policy clusterv1alpha1.RetentionPolicy) *clusterv1alpha1.T4Wo
 func testSession() *clusterv1alpha1.T4Session {
 	return &clusterv1alpha1.T4Session{
 		ObjectMeta: metav1.ObjectMeta{Name: "session-a", Namespace: "team", Generation: 2},
-		Spec: clusterv1alpha1.T4SessionSpec{HostRef: "host-a", WorkspaceRef: "workspace-a", Title: "Session A", RuntimeProfile: "default", GUIEnabled: true},
+		Spec:       clusterv1alpha1.T4SessionSpec{HostRef: "host-a", WorkspaceRef: "workspace-a", Title: "Session A", RuntimeProfile: "default", GUIEnabled: true},
 	}
 }
 
@@ -332,4 +371,3 @@ func hasMount(mounts []corev1.VolumeMount, name, path string) bool {
 }
 
 func ptr[T any](value T) *T { return &value }
-

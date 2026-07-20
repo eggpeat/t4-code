@@ -7,7 +7,7 @@ import {
 	type HostId,
 	type ServerFrame,
 } from "@t4-code/host-wire";
-import { canonicalInternalDeviceToken } from "./session-host-policy.ts";
+import { readClusterIdentityToken } from "./config.ts";
 
 export interface PodHostEndpoint {
 	readonly clusterSessionId: string;
@@ -25,17 +25,17 @@ export interface PodHostConnector {
 	connect(endpoint: PodHostEndpoint, onFrame: (frame: ServerFrame) => void, onClose?: () => void): Promise<PodHostConnection>;
 }
 export interface WebSocketPodHostConnectorOptions {
-	readonly internalToken: string;
+	readonly identityTokenFile: string;
 	readonly openTimeoutMs?: number;
 	readonly webSocketFactory?: (url: string) => WebSocket;
 }
 
 export class WebSocketPodHostConnector implements PodHostConnector {
-	readonly #token: string;
+	readonly #identityTokenFile: string;
 	readonly #timeoutMs: number;
 	readonly #factory: (url: string) => WebSocket;
 	constructor(options: WebSocketPodHostConnectorOptions) {
-		this.#token = canonicalInternalDeviceToken(options.internalToken);
+		this.#identityTokenFile = options.identityTokenFile;
 		this.#timeoutMs = options.openTimeoutMs ?? 10_000;
 		this.#factory = options.webSocketFactory ?? (url => new WebSocket(url));
 	}
@@ -49,15 +49,24 @@ export class WebSocketPodHostConnector implements PodHostConnector {
 				if (!settled) { settled = true; socket.close(1013, "upstream timeout"); reject(new Error("pod host handshake timed out")); }
 			}, this.#timeoutMs);
 			socket.addEventListener("open", () => {
-				socket.send(JSON.stringify({
-					v: "omp-app/1", type: "hello",
-					protocol: { min: "omp-app/1", max: "omp-app/1" },
-					client: { name: "cluster-server", version: "0.1.30", build: "cluster", platform: "linux" },
-					requestedFeatures: PROTOCOL_FEATURES.filter(feature => feature !== "cluster.operator"),
-					savedCursors: [],
-					capabilities: { client: DEVICE_CAPABILITIES.filter(capability => capability !== "ci.trigger") },
-					authentication: { deviceId: "cluster-server", deviceToken: this.#token },
-				}));
+				void readClusterIdentityToken(this.#identityTokenFile).then(token => {
+					if (settled) return;
+					socket.send(JSON.stringify({
+						v: "omp-app/1", type: "hello",
+						protocol: { min: "omp-app/1", max: "omp-app/1" },
+						client: { name: "cluster-server", version: "0.1.30", build: "cluster", platform: "linux" },
+						requestedFeatures: PROTOCOL_FEATURES.filter(feature => feature !== "cluster.operator"),
+						savedCursors: [],
+						capabilities: { client: DEVICE_CAPABILITIES.filter(capability => capability !== "ci.trigger") },
+						authentication: { deviceId: "cluster-server", deviceToken: token },
+					}));
+				}, () => {
+					if (settled) return;
+					settled = true;
+					clearTimeout(timer);
+					socket.close(1011, "identity unavailable");
+					reject(new Error("pod host identity is unavailable"));
+				});
 			});
 			socket.addEventListener("message", event => {
 				try {
