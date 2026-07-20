@@ -766,7 +766,7 @@ export class LocalAppserver implements AppserverHandle {
 	#stateRefreshGenerations = new Map<SessionId, number>();
 	#transcripts = new Map<SessionId, TranscriptEventTranslator>();
 	#subagents = new Map<SessionId, SubagentProjection>();
-	#lockStatus: (session: SessionRecord) => SessionLockStatus;
+	#lockStatus: (session: SessionRecord) => SessionLockStatus | Promise<SessionLockStatus>;
 	#observers = new Map<SessionId, SessionTranscriptObserver>();
 	#observerTimers = new Map<SessionId, ReturnType<typeof setInterval>>();
 	#observerRefreshes = new Map<SessionId, { promise: Promise<void>; rerun: boolean }>();
@@ -884,7 +884,7 @@ export class LocalAppserver implements AppserverHandle {
 			? new TranscriptImageReader({ root: options.transcriptImageRoot })
 			: undefined;
 		this.#lockStatus = options.lockStatus ?? (() => "missing");
-		this.#factory = options.childFactory ?? new BunRpcChildFactory(undefined, this.#imageUploads.root);
+		this.#factory = options.childFactory ?? new BunRpcChildFactory(options.rpcChildInvocation, this.#imageUploads.root);
 		this.#ringSize = options.ringSize ?? 256;
 		if (options.lockStatus && !options.lockCheck)
 			this.#lockCheck = () => {
@@ -4226,7 +4226,7 @@ export class LocalAppserver implements AppserverHandle {
 		if (this.#supervisors.has(sessionId)) return;
 		let status: SessionLockStatus;
 		try {
-			status = this.#lockStatus(record);
+			status = await this.#lockStatus(record);
 		} catch {
 			status = "malformed";
 		}
@@ -4274,7 +4274,7 @@ export class LocalAppserver implements AppserverHandle {
 		if (poll.unresolvedPendingCount !== 0) return;
 		let promotionLockStatus: SessionLockStatus;
 		try {
-			promotionLockStatus = this.#lockStatus(record);
+			promotionLockStatus = await this.#lockStatus(record);
 		} catch {
 			promotionLockStatus = "malformed";
 		}
