@@ -467,7 +467,7 @@ test.describe("OMP/T4 cluster GUI boundaries", () => {
     const workspaceRow = page.locator('[data-cluster-workspace-id="workspace-a"]');
     await expect(workspaceRow).toHaveCount(1);
     await expect(workspaceRow).toHaveAttribute("data-cluster-host-id", HOST);
-    await expect(page.getByText("t4-workspaces-rwx", { exact: true })).toBeVisible();
+    await expect(workspaceRow).toContainText("t4-workspaces-rwx");
     await expect(page.getByRole("heading", { name: "Cluster workspaces" })).toBeVisible();
 
     const creationHost = page.getByLabel("Creation host");
