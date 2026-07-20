@@ -298,7 +298,9 @@ class OperatorWireFixture {
         this.response(socket, frame, { accepted: true });
         return;
       case "preview.state":
-        this.response(socket, frame, { previews: [GUI_PREVIEW, DECOY_PREVIEW] });
+        this.response(socket, frame, {
+          previews: [structuredClone(GUI_PREVIEW), structuredClone(DECOY_PREVIEW)],
+        });
         return;
       case "preview.policy.check":
         this.response(socket, frame, { allowed: true, confirmationRequired: false });
