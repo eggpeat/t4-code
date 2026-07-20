@@ -100,7 +100,7 @@
     },
     "session": {
       "type": "object",
-      "required": ["nodeExclude", "resources", "sharedMemorySize", "temporarySize"],
+      "required": ["nodeExclude", "resources", "sharedMemorySize", "temporarySize", "omp"],
       "properties": {
         "nodeExclude": {
           "type": "array",
@@ -112,7 +112,19 @@
         },
         "resources": { "type": "object" },
         "sharedMemorySize": { "type": "string", "pattern": "^[1-9][0-9]*(Mi|Gi)$" },
-        "temporarySize": { "type": "string", "pattern": "^[1-9][0-9]*(Mi|Gi)$" }
+        "temporarySize": { "type": "string", "pattern": "^[1-9][0-9]*(Mi|Gi)$" },
+        "omp": {
+          "type": "object",
+          "required": ["configMap", "modelsKey", "settingsKey", "credentialSecret", "credentialKey", "allowUnauthenticated"],
+          "properties": {
+            "configMap": { "$ref": "#/definitions/optionalDNSSubdomain" },
+            "modelsKey": { "$ref": "#/definitions/optionalConfigKey" },
+            "settingsKey": { "$ref": "#/definitions/optionalConfigKey" },
+            "credentialSecret": { "$ref": "#/definitions/optionalDNSSubdomain" },
+            "credentialKey": { "$ref": "#/definitions/optionalEnvVarName" },
+            "allowUnauthenticated": { "type": "boolean" }
+          }
+        }
       }
     },
     "storage": {
@@ -167,12 +179,16 @@
     },
     "networkPolicy": {
       "type": "object",
-      "required": ["enabled", "kubernetesApiCIDRs", "modelRouteCIDRs", "ciProviderCIDRs", "dns", "gatewayIngress", "observability"],
+      "required": ["enabled", "kubernetesApiCIDRs", "modelRouteCIDRs", "modelRoutePorts", "modelRoute", "ciProviderCIDRs", "ciProviderPorts", "ciProvider", "dns", "gatewayIngress", "observability"],
       "properties": {
         "enabled": { "type": "boolean" },
         "kubernetesApiCIDRs": { "$ref": "#/definitions/cidrList" },
         "modelRouteCIDRs": { "$ref": "#/definitions/cidrList" },
+        "modelRoutePorts": { "$ref": "#/definitions/tcpPortList" },
+        "modelRoute": { "$ref": "#/definitions/pairedSelectors" },
         "ciProviderCIDRs": { "$ref": "#/definitions/cidrList" },
+        "ciProviderPorts": { "$ref": "#/definitions/tcpPortList" },
+        "ciProvider": { "$ref": "#/definitions/pairedSelectors" },
         "dns": {
           "type": "object",
           "required": ["namespaceSelector", "podSelector"],
@@ -250,6 +266,16 @@
       "maxLength": 253,
       "pattern": "^[-._A-Za-z0-9]+$"
     },
+    "optionalConfigKey": {
+      "type": "string",
+      "maxLength": 253,
+      "pattern": "^$|^[-._A-Za-z0-9]+$"
+    },
+    "optionalEnvVarName": {
+      "type": "string",
+      "maxLength": 253,
+      "pattern": "^$|^[A-Za-z_][A-Za-z0-9_]*$"
+    },
     "nonDefaultRouteCIDR": {
       "type": "string",
       "maxLength": 64,
@@ -260,6 +286,12 @@
       "maxItems": 64,
       "uniqueItems": true,
       "items": { "$ref": "#/definitions/nonDefaultRouteCIDR" }
+    },
+    "tcpPortList": {
+      "type": "array",
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": { "type": "integer", "minimum": 1, "maximum": 65535 }
     },
     "labelSelector": {
       "type": "object",
@@ -331,6 +363,33 @@
             ]
           },
           "storage": { "properties": { "adminRWXStorageClass": { "minLength": 1 } } },
+          "session": {
+            "properties": {
+              "omp": {
+                "properties": {
+                  "configMap": { "minLength": 1 },
+                  "modelsKey": { "minLength": 1 },
+                  "settingsKey": { "minLength": 1 }
+                },
+                "oneOf": [
+                  {
+                    "properties": {
+                      "allowUnauthenticated": { "const": false },
+                      "credentialSecret": { "minLength": 1 },
+                      "credentialKey": { "minLength": 1 }
+                    }
+                  },
+                  {
+                    "properties": {
+                      "allowUnauthenticated": { "const": true },
+                      "credentialSecret": { "maxLength": 0 },
+                      "credentialKey": { "maxLength": 0 }
+                    }
+                  }
+                ]
+              }
+            }
+          },
           "images": {
             "properties": {
               "controller": { "properties": { "digest": { "pattern": "^sha256:[0-9a-f]{64}$" } } },

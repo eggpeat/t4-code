@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"regexp"
 	"strings"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	intstr "k8s.io/apimachinery/pkg/util/intstr"
+	utilvalidation "k8s.io/apimachinery/pkg/util/validation"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -31,6 +33,46 @@ const (
 	SessionReviewerTokenExpirationSeconds int64 = 3600
 )
 
+var (
+	configMapKeyPattern = regexp.MustCompile(`^[-._A-Za-z0-9]+$`)
+	envVarNamePattern   = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+)
+
+type SessionOMPConfig struct {
+	ConfigMapName        string
+	ModelsKey            string
+	SettingsKey          string
+	CredentialSecretName string
+	CredentialKey        string
+	AllowUnauthenticated bool
+}
+
+func (config SessionOMPConfig) validationFailure() (string, string) {
+	if config.ConfigMapName == "" || config.ModelsKey == "" || config.SettingsKey == "" {
+		return "OMPReferencesMissing", "administrator-owned OMP ConfigMap and configuration keys are not configured"
+	}
+	if config.AllowUnauthenticated {
+		if config.CredentialSecretName != "" || config.CredentialKey != "" {
+			return "OMPReferencesInvalid", "unauthenticated OMP mode cannot include credential Secret references"
+		}
+	} else {
+		if config.CredentialSecretName == "" && config.CredentialKey == "" {
+			return "OMPReferencesMissing", "administrator-owned OMP credential Secret and key are not configured"
+		}
+		if config.CredentialSecretName == "" || config.CredentialKey == "" {
+			return "OMPReferencesInvalid", "OMP credential Secret and key must be configured together"
+		}
+	}
+	if len(utilvalidation.IsDNS1123Subdomain(config.ConfigMapName)) != 0 ||
+		len(config.ModelsKey) > 253 || !configMapKeyPattern.MatchString(config.ModelsKey) ||
+		len(config.SettingsKey) > 253 || !configMapKeyPattern.MatchString(config.SettingsKey) ||
+		(config.CredentialSecretName != "" && len(utilvalidation.IsDNS1123Subdomain(config.CredentialSecretName)) != 0) ||
+		(config.CredentialKey != "" && (len(config.CredentialKey) > 253 || !envVarNamePattern.MatchString(config.CredentialKey))) {
+		return "OMPReferencesInvalid", "administrator-owned OMP configuration references are invalid"
+	}
+	return "", ""
+}
+
 type SessionReconciler struct {
 	client.Client
 	Scheme                    *runtime.Scheme
@@ -38,6 +80,7 @@ type SessionReconciler struct {
 	SessionServiceAccountName string
 	ServerServiceAccountName  string
 	KubernetesAPIAudience     string
+	OMPConfig                 SessionOMPConfig
 	ExcludedNodeNames         []string
 	Resources                 corev1.ResourceRequirements
 	SharedMemorySize          apiresource.Quantity
@@ -64,6 +107,9 @@ func (r *SessionReconciler) Reconcile(ctx context.Context, request ctrl.Request)
 	}
 	if r.RuntimeImage == "" {
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, r.updateSessionFailure(ctx, &session, "RuntimeConfigured", "RuntimeImageMissing", "administrator-owned session runtime image is not configured")
+	}
+	if reason, message := r.OMPConfig.validationFailure(); reason != "" {
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, r.updateSessionFailure(ctx, &session, "RuntimeConfigured", reason, message)
 	}
 
 	var host clusterv1alpha1.T4ClusterHost
@@ -194,6 +240,7 @@ func (r *SessionReconciler) Reconcile(ctx context.Context, request ctrl.Request)
 	session.Status.PodName = podName
 	session.Status.ServiceName = serviceName
 	meta.SetStatusCondition(&session.Status.Conditions, condition("WorkspaceReady", metav1.ConditionTrue, "PVCBoundRWX", "workspace PVC is Bound and ReadWriteMany", session.Generation))
+	meta.SetStatusCondition(&session.Status.Conditions, condition("RuntimeConfigured", metav1.ConditionTrue, "OMPReferencesReady", "administrator-owned OMP runtime references are configured", session.Generation))
 	if podReady(&pod) {
 		session.Status.Phase = clusterv1alpha1.InfrastructureRunning
 		meta.SetStatusCondition(&session.Status.Conditions, condition("Available", metav1.ConditionTrue, "PodReady", "session infrastructure pod is ready", session.Generation))
@@ -269,6 +316,8 @@ func (r *SessionReconciler) desiredPod(session *clusterv1alpha1.T4Session, pvcNa
 			{Name: "T4_BROWSER_STATE_DIR", Value: "/workspace/.t4/sessions/" + stateID + "/browser"},
 			{Name: "T4_GUI_ENABLED", Value: fmt.Sprintf("%t", session.Spec.GUIEnabled)},
 			{Name: "DISPLAY", Value: ":99"},
+			{Name: "T4_OMP_CONFIG_SOURCE_DIR", Value: "/run/t4-omp-config-source"},
+			{Name: "T4_OMP_ALLOW_UNAUTHENTICATED", Value: fmt.Sprintf("%t", r.OMPConfig.AllowUnauthenticated)},
 		},
 		VolumeMounts: []corev1.VolumeMount{
 			{Name: "workspace", MountPath: "/workspace"},
@@ -276,6 +325,7 @@ func (r *SessionReconciler) desiredPod(session *clusterv1alpha1.T4Session, pvcNa
 			{Name: "temporary", MountPath: "/tmp"},
 			{Name: "shared-memory", MountPath: "/dev/shm"},
 			{Name: "kubernetes-api-access", MountPath: "/var/run/secrets/kubernetes.io/serviceaccount", ReadOnly: true},
+			{Name: "omp-config-source", MountPath: "/run/t4-omp-config-source", ReadOnly: true},
 		},
 		SecurityContext: &corev1.SecurityContext{
 			AllowPrivilegeEscalation: &falseValue, ReadOnlyRootFilesystem: &trueValue, RunAsNonRoot: &trueValue, RunAsUser: &runAsUser,
@@ -285,6 +335,17 @@ func (r *SessionReconciler) desiredPod(session *clusterv1alpha1.T4Session, pvcNa
 		StartupProbe:   &corev1.Probe{ProbeHandler: corev1.ProbeHandler{TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromString("host")}}, FailureThreshold: 30, PeriodSeconds: 2, TimeoutSeconds: 1},
 		ReadinessProbe: &corev1.Probe{ProbeHandler: corev1.ProbeHandler{TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromString("host")}}, FailureThreshold: 3, PeriodSeconds: 5, TimeoutSeconds: 2},
 		LivenessProbe:  &corev1.Probe{ProbeHandler: corev1.ProbeHandler{TCPSocket: &corev1.TCPSocketAction{Port: intstr.FromString("host")}}, FailureThreshold: 3, PeriodSeconds: 10, TimeoutSeconds: 2},
+	}
+	if !r.OMPConfig.AllowUnauthenticated {
+		container.Args = []string{r.OMPConfig.CredentialKey}
+		container.Env = append(container.Env, corev1.EnvVar{
+			Name: r.OMPConfig.CredentialKey,
+			ValueFrom: &corev1.EnvVarSource{SecretKeyRef: &corev1.SecretKeySelector{
+				LocalObjectReference: corev1.LocalObjectReference{Name: r.OMPConfig.CredentialSecretName},
+				Key:                  r.OMPConfig.CredentialKey,
+				Optional:             &falseValue,
+			}},
+		})
 	}
 	volumes := []corev1.Volume{
 		{Name: "workspace", VolumeSource: corev1.VolumeSource{PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{ClaimName: pvcName}}},
@@ -297,6 +358,15 @@ func (r *SessionReconciler) desiredPod(session *clusterv1alpha1.T4Session, pvcNa
 				{ServiceAccountToken: &corev1.ServiceAccountTokenProjection{Audience: kubernetesAPIAudience, ExpirationSeconds: ptr(SessionReviewerTokenExpirationSeconds), Path: "token"}},
 				{ConfigMap: &corev1.ConfigMapProjection{LocalObjectReference: corev1.LocalObjectReference{Name: "kube-root-ca.crt"}, Items: []corev1.KeyToPath{{Key: "ca.crt", Path: "ca.crt"}}}},
 				{DownwardAPI: &corev1.DownwardAPIProjection{Items: []corev1.DownwardAPIVolumeFile{{Path: "namespace", FieldRef: &corev1.ObjectFieldSelector{APIVersion: "v1", FieldPath: "metadata.namespace"}}}}},
+			},
+		}}},
+		{Name: "omp-config-source", VolumeSource: corev1.VolumeSource{ConfigMap: &corev1.ConfigMapVolumeSource{
+			LocalObjectReference: corev1.LocalObjectReference{Name: r.OMPConfig.ConfigMapName},
+			DefaultMode:          ptr(int32(0440)),
+			Optional:             &falseValue,
+			Items: []corev1.KeyToPath{
+				{Key: r.OMPConfig.ModelsKey, Path: "models.yml", Mode: ptr(int32(0440))},
+				{Key: r.OMPConfig.SettingsKey, Path: "config.yml", Mode: ptr(int32(0440))},
 			},
 		}}},
 	}

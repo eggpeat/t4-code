@@ -66,6 +66,16 @@ session:
   sharedMemorySize: 1Gi
   temporarySize: 2Gi
 
+  omp:
+    # Administrator-owned runtime configuration references. The chart creates neither object.
+    configMap: ""
+    modelsKey: ""
+    settingsKey: ""
+    credentialSecret: ""
+    credentialKey: ""
+    # Explicit opt-in for a private, policy-isolated models.yml provider using auth: none.
+    allowUnauthenticated: false
+
 storage:
   # Required when enabled. The administrator creates this backend-neutral RWX StorageClass.
   adminRWXStorageClass: ""
@@ -93,10 +103,22 @@ ingress:
 
 networkPolicy:
   enabled: true
-  # Empty lists fail closed. Supply narrow destination CIDRs for enabled components.
+  # Empty destination lists fail closed. Supply narrow destinations for enabled components.
   kubernetesApiCIDRs: []
   modelRouteCIDRs: []
+  modelRoutePorts: []
+  modelRoute:
+    # Optional in-cluster model endpoint identity. Set both selectors or neither.
+    namespaceSelector: {}
+    podSelector: {}
   ciProviderCIDRs: []
+  # This port is inert until a CI destination CIDR or complete selector pair is supplied.
+  ciProviderPorts:
+    - 443
+  ciProvider:
+    # Optional in-cluster CI endpoint identity. Set both selectors or neither.
+    namespaceSelector: {}
+    podSelector: {}
   dns:
     namespaceSelector:
       matchLabels:

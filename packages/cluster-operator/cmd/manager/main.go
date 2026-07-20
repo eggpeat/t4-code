@@ -81,7 +81,8 @@ func main() {
 		RuntimeImage:              os.Getenv("T4_SESSION_RUNTIME_IMAGE"),
 		SessionServiceAccountName: sessionServiceAccount,
 		ServerServiceAccountName:  serverServiceAccount,
-		KubernetesAPIAudience:      envOr("T4_KUBERNETES_API_AUDIENCE", controllers.DefaultKubernetesAPIAudience),
+		KubernetesAPIAudience:     envOr("T4_KUBERNETES_API_AUDIENCE", controllers.DefaultKubernetesAPIAudience),
+		OMPConfig:                 sessionOMPConfigFromEnv(),
 		ExcludedNodeNames:         excludedNodes,
 		Resources: corev1.ResourceRequirements{
 			Requests: corev1.ResourceList{
@@ -121,6 +122,17 @@ func splitNonempty(value string) []string {
 		}
 	}
 	return result
+}
+
+func sessionOMPConfigFromEnv() controllers.SessionOMPConfig {
+	return controllers.SessionOMPConfig{
+		ConfigMapName:        os.Getenv("T4_SESSION_OMP_CONFIG_MAP"),
+		ModelsKey:            os.Getenv("T4_SESSION_OMP_MODELS_KEY"),
+		SettingsKey:          os.Getenv("T4_SESSION_OMP_SETTINGS_KEY"),
+		CredentialSecretName: os.Getenv("T4_SESSION_OMP_CREDENTIAL_SECRET"),
+		CredentialKey:        os.Getenv("T4_SESSION_OMP_CREDENTIAL_KEY"),
+		AllowUnauthenticated: strings.EqualFold(strings.TrimSpace(os.Getenv("T4_SESSION_OMP_ALLOW_UNAUTHENTICATED")), "true"),
+	}
 }
 
 func sessionServiceAccountNames() (string, string) {

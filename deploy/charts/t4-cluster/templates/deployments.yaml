@@ -73,6 +73,18 @@ spec:
               valueFrom: {fieldRef: {fieldPath: metadata.namespace}}
             - name: T4_SESSION_RUNTIME_IMAGE
               value: {{ include "t4-cluster.image" .Values.images.sessionRuntime | quote }}
+            - name: T4_SESSION_OMP_CONFIG_MAP
+              value: {{ .Values.session.omp.configMap | quote }}
+            - name: T4_SESSION_OMP_MODELS_KEY
+              value: {{ .Values.session.omp.modelsKey | quote }}
+            - name: T4_SESSION_OMP_SETTINGS_KEY
+              value: {{ .Values.session.omp.settingsKey | quote }}
+            - name: T4_SESSION_OMP_CREDENTIAL_SECRET
+              value: {{ .Values.session.omp.credentialSecret | quote }}
+            - name: T4_SESSION_OMP_CREDENTIAL_KEY
+              value: {{ .Values.session.omp.credentialKey | quote }}
+            - name: T4_SESSION_OMP_ALLOW_UNAUTHENTICATED
+              value: {{ .Values.session.omp.allowUnauthenticated | quote }}
             - name: T4_SESSION_SERVICE_ACCOUNT
               value: {{ printf "%s-session" (include "t4-cluster.fullname" .) | quote }}
             - name: T4_CLUSTER_SERVER_SERVICE_ACCOUNT

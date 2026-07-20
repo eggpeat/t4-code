@@ -7,7 +7,8 @@ The portable `t4-cluster` chart runs the infrastructure control plane for T4 wor
 - Kubernetes 1.30 or newer.
 - An administrator-managed StorageClass that actually provisions `ReadWriteMany` volumes.
 - Three immutable image digests: `t4-cluster-operator`, `t4-cluster-server`, and `t4-session-runtime`.
-- Narrow Kubernetes API, model-route, CI-provider, ingress-controller, and metrics-scraper network identities for the enabled integrations.
+- An administrator-owned same-namespace ConfigMap containing the OMP `models.yml` and `config.yml` inputs, plus either a same-namespace credential Secret or an explicit private unauthenticated-provider opt-in.
+- Narrow Kubernetes API, model-route, CI-provider, ingress-controller, and metrics-scraper network identities and ports for the enabled integrations.
 - A local T4 client explicitly configured to request the default-false `cluster.operator` feature. Installing this chart does not enable the client feature.
 
 The chart does not install NFS, CSI drivers, a StorageClass, host paths, or backend-specific storage configuration. The cluster administrator must create and validate the RWX StorageClass. Mark a class as reviewed for this controller:
@@ -50,10 +51,37 @@ images:
 kubernetes:
   # Set this to an audience accepted by this cluster's API server.
   apiAudience: https://kubernetes.default.svc
+session:
+  nodeExclude: [k3s-worker-02]
+  omp:
+    # Existing same-namespace objects; the chart creates neither one.
+    configMap: omp-runtime-config
+    modelsKey: models.yml
+    settingsKey: config.yml
+    credentialSecret: omp-runtime-credential
+    # This existing Secret key is also the environment variable name seen by OMP.
+    credentialKey: PI_MODEL_API_KEY
+    allowUnauthenticated: false
 networkPolicy:
   kubernetesApiCIDRs: [192.0.2.10/32]
   modelRouteCIDRs: [198.51.100.20/32]
+  modelRoutePorts: [19481]
+  modelRoute:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: private-model-service
+    podSelector:
+      matchLabels:
+        app.kubernetes.io/name: private-model-endpoint
   ciProviderCIDRs: [203.0.113.30/32]
+  ciProviderPorts: [8080]
+  ciProvider:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: private-ci-service
+    podSelector:
+      matchLabels:
+        app.kubernetes.io/name: ci-trigger
   dns:
     namespaceSelector:
       matchLabels:
@@ -75,11 +103,13 @@ networkPolicy:
     podSelector:
       matchLabels:
         monitoring.example/component: prometheus
-session:
-  nodeExclude: [k3s-worker-02]
 ```
 
-The sample destination CIDRs and gateway/observability labels are documentation values, not usable defaults. Keep the chart backend-neutral and set destinations and integration sources to the actual cluster endpoints. Empty destination lists and paired integration selectors deny those flows.
+The sample destination CIDRs, TCP ports, model/CI endpoint selectors, and gateway/observability labels are documentation values, not usable defaults. Keep the chart backend-neutral and set destinations and integration sources to the actual cluster endpoints. Model and CI route CIDRs and their optional paired namespace/pod selectors are allowed only on the corresponding exact port lists. An empty model port list renders no model route; the default CI port remains inert until a CI CIDR or complete selector pair is supplied. Empty paired selectors render no selector rule, and other empty destination lists likewise deny those flows.
+
+The chart never creates the referenced OMP ConfigMap or Secret and never accepts their contents. The administrator must create them in the chart namespace. `modelsKey` is projected as read-only `models.yml`, `settingsKey` as read-only `config.yml`, and the configured `credentialKey` selects the same Secret key and OMP environment-variable name. The entrypoint validates both projected files and the nonempty credential without logging values, then atomically installs private copies under the authority child's actual `${T4_AUTHORITY_STATE_DIR}/home/.omp/agent` home before starting Xvfb or OMP.
+
+Credential mode is the default and requires both `credentialSecret` and `credentialKey`. An administrator may instead set `allowUnauthenticated: true` only when both credential fields are empty and the private, identity- and NetworkPolicy-isolated model endpoint is intentionally unauthenticated. In that mode the referenced `models.yml` must declare `auth: none` and must not declare `apiKey` or `authHeader`; never use this opt-in for an Internet-reachable or shared endpoint. The chart does not select or hardcode a provider, model, or prompt policy in either mode.
 
 Install or enable with immutable digests:
 
@@ -113,9 +143,9 @@ The optional initial prompt is referenced by Secret name and key `prompt`; the S
 
 `cluster/images/controller/Dockerfile`, `cluster/images/cluster-server/Dockerfile`, and `cluster/images/session-runtime/Dockerfile` use digest-pinned multi-platform build bases. BuildKit selects the requested target platform; the Dockerfiles do not hardcode or label an architecture that was not built. Debian packages are resolved through a dated snapshot. Published chart values still require per-image immutable digests.
 
-The session runtime verifies and builds the exact OMP tag `t4code-17.0.5-appserver-10` at commit `8476f4451ed95c5d5401785d279a93d3c659fac4`. It preserves `t4-omp-authority/1`, starts the existing T4 session-host entrypoint, and provides Xvfb, a minimal window manager, and Chromium without privileged mode or host display access. The shared claim is mounted at `/workspace`; authority and browser state live in controller-selected per-session subdirectories. `/dev/shm` is an explicit memory-backed volume. Browser Preview remains the existing GUI stream and control surface.
+The session runtime verifies and builds the exact OMP tag `t4code-17.0.5-appserver-10` at commit `8476f4451ed95c5d5401785d279a93d3c659fac4`. It preserves `t4-omp-authority/1`, starts the existing T4 session-host entrypoint, and provides Xvfb, a minimal window manager, and Chromium without privileged mode or host display access. The shared claim is mounted at `/workspace`; authority and browser state live in controller-selected per-session subdirectories. OMP configuration is copied from the read-only administrator ConfigMap projection into the private authority child home before launch. `/dev/shm` is an explicit memory-backed volume. Browser Preview remains the existing GUI stream and control surface.
 
-Session pods do not receive an automatically mounted ServiceAccount token. The explicit projected reviewer token can only create TokenReviews and is not resource-authorized. All containers drop capabilities, disallow privilege escalation, use RuntimeDefault seccomp, and use read-only root filesystems. No per-session NodePort, LoadBalancer, host network, host PID, host display, or hostPath is created.
+Session pods do not receive an automatically mounted ServiceAccount token. The explicit projected reviewer token can only create TokenReviews and is not resource-authorized. ConfigMap and credential inputs are namespace-local references; credential mode uses an explicit non-optional `SecretKeyRef`, while explicit unauthenticated mode adds no Secret reference. All containers drop capabilities, disallow privilege escalation, use RuntimeDefault seccomp, and use read-only root filesystems. No per-session NodePort, LoadBalancer, host network, host PID, host display, or hostPath is created.
 
 ## Upgrade and rollback
 

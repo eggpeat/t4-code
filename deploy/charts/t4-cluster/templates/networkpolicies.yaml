@@ -80,11 +80,26 @@ spec:
         - {protocol: TCP, port: 443}
         - {protocol: TCP, port: 6443}
     {{- end }}
+    {{- if .Values.networkPolicy.ciProviderPorts }}
     {{- range .Values.networkPolicy.ciProviderCIDRs }}
     - to:
         - ipBlock: {cidr: {{ . | quote }}}
       ports:
-        - {protocol: TCP, port: 443}
+        {{- range $.Values.networkPolicy.ciProviderPorts }}
+        - {protocol: TCP, port: {{ . }}}
+        {{- end }}
+    {{- end }}
+    {{- if and (not (empty .Values.networkPolicy.ciProvider.namespaceSelector)) (not (empty .Values.networkPolicy.ciProvider.podSelector)) }}
+    - to:
+        - namespaceSelector:
+            {{- toYaml .Values.networkPolicy.ciProvider.namespaceSelector | nindent 12 }}
+          podSelector:
+            {{- toYaml .Values.networkPolicy.ciProvider.podSelector | nindent 12 }}
+      ports:
+        {{- range .Values.networkPolicy.ciProviderPorts }}
+        - {protocol: TCP, port: {{ . }}}
+        {{- end }}
+    {{- end }}
     {{- end }}
 ---
 apiVersion: networking.k8s.io/v1
@@ -115,11 +130,26 @@ spec:
         - {protocol: TCP, port: 443}
         - {protocol: TCP, port: 6443}
     {{- end }}
+    {{- if .Values.networkPolicy.modelRoutePorts }}
     {{- range .Values.networkPolicy.modelRouteCIDRs }}
     - to:
         - ipBlock: {cidr: {{ . | quote }}}
       ports:
-        - {protocol: TCP, port: 443}
+        {{- range $.Values.networkPolicy.modelRoutePorts }}
+        - {protocol: TCP, port: {{ . }}}
+        {{- end }}
+    {{- end }}
+    {{- if and (not (empty .Values.networkPolicy.modelRoute.namespaceSelector)) (not (empty .Values.networkPolicy.modelRoute.podSelector)) }}
+    - to:
+        - namespaceSelector:
+            {{- toYaml .Values.networkPolicy.modelRoute.namespaceSelector | nindent 12 }}
+          podSelector:
+            {{- toYaml .Values.networkPolicy.modelRoute.podSelector | nindent 12 }}
+      ports:
+        {{- range .Values.networkPolicy.modelRoutePorts }}
+        - {protocol: TCP, port: {{ . }}}
+        {{- end }}
+    {{- end }}
     {{- end }}
 ---
 apiVersion: networking.k8s.io/v1
