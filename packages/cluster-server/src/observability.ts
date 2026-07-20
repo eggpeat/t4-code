@@ -96,7 +96,6 @@ export class ClusterServerHealth {
 export interface AdminHandlerOptions {
 	readonly health: ClusterServerHealth;
 	readonly metrics: ClusterMetrics;
-	readonly drain: () => Promise<void> | void;
 }
 function json(value: unknown, status = 200): Response {
 	return Response.json(value, { status, headers: { "cache-control": "no-store" } });
@@ -107,11 +106,6 @@ export function createAdminHandler(options: AdminHandlerOptions): (request: Requ
 		if (path === "/healthz") return request.method === "GET" ? json({ healthy: options.health.healthy }) : new Response(null, { status: 405 });
 		if (path === "/readyz") return request.method === "GET" ? json({ ready: options.health.ready }, options.health.ready ? 200 : 503) : new Response(null, { status: 405 });
 		if (path === "/metrics") return request.method === "GET" ? new Response(options.metrics.render(), { headers: { "content-type": "text/plain; version=0.0.4; charset=utf-8", "cache-control": "no-store" } }) : new Response(null, { status: 405 });
-		if (path === "/drainz") {
-			if (request.method !== "POST") return new Response(null, { status: 405 });
-			await options.drain();
-			return json({ draining: true }, 202);
-		}
 		return new Response("not found", { status: 404 });
 	};
 }

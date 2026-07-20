@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vite-plus/test"
 import type { RemoteConnection } from "@t4-code/host-service";
 import { ClusterInternalRemotePolicy, sessionHostConfigFromEnv } from "../src/session-host-policy.ts";
 

@@ -227,6 +227,7 @@ test("Woodpecker keeps upstream gates and serializes bounded cluster publication
   assert.ok(
     steps["cluster-server-tests"].commands.includes("pnpm --filter @t4-code/cluster-server test"),
   );
+  assert.ok(steps["cluster-wire-tests"].commands.includes("pnpm --filter @t4-code/host-wire test"));
   assert.equal(JSON.stringify(pipeline).includes("from_secret"), false);
   assert.deepEqual(steps["harbor-auth"].depends_on, ["cluster-chart-tests", "android-debug"]);
   assert.equal(

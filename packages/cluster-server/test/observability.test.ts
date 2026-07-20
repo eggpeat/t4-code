@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vite-plus/test"
 import {
 	ClusterMetrics,
 	ClusterServerHealth,
@@ -6,6 +6,7 @@ import {
 	createAdminHandler,
 	redactStructuredValue,
 } from "../src/observability.ts";
+import { isLoopbackAddress } from "../src/server.ts";
 
 describe("cluster-server observability", () => {
 	test("redacts credentials, prompt content, pairing data, and private paths recursively", () => {
@@ -34,12 +35,10 @@ describe("cluster-server observability", () => {
 		expect(JSON.parse(lines[0] ?? "{}")).toMatchObject({ level: "info", message: "ci lookup", provider: "woodpecker", token: "[REDACTED]" });
 	});
 
-	test("serves separate health/readiness, bounded metrics, and graceful drain", async () => {
+	test("serves separate health/readiness and bounded metrics without a remote drain route", async () => {
 		const health = new ClusterServerHealth();
 		const metrics = new ClusterMetrics({ component: "cluster-server", version: "test" });
-		let drained = 0;
-		const handler = createAdminHandler({ health, metrics, drain: async () => { drained++; health.beginDrain(); } });
-
+		const handler = createAdminHandler({ health, metrics });
 		expect((await handler(new Request("http://admin/healthz"))).status).toBe(200);
 		expect((await handler(new Request("http://admin/readyz"))).status).toBe(503);
 		health.markKubernetesSynced();
@@ -54,10 +53,16 @@ describe("cluster-server observability", () => {
 		expect(body).toContain('t4_cluster_gateway_commands_total{component="cluster-server",provider="woodpecker",result="success",version="test"} 1');
 		expect(body).not.toContain("token");
 
-		expect((await handler(new Request("http://admin/drainz", { method: "POST" }))).status).toBe(202);
-		expect(drained).toBe(1);
-		expect((await handler(new Request("http://admin/readyz"))).status).toBe(503);
-		expect((await handler(new Request("http://admin/drainz"))).status).toBe(405);
+		expect((await handler(new Request("http://admin/drainz", { method: "POST" }))).status).toBe(404);
+		expect((await handler(new Request("http://admin/readyz"))).status).toBe(200);
+	});
+
+	test("recognizes only kernel loopback sources for the preStop drain route", () => {
+		expect(isLoopbackAddress("127.0.0.1")).toBe(true);
+		expect(isLoopbackAddress("127.42.0.7")).toBe(true);
+		expect(isLoopbackAddress("::1")).toBe(true);
+		expect(isLoopbackAddress("10.42.0.7")).toBe(false);
+		expect(isLoopbackAddress("fd7a:115c:a1e0::1")).toBe(false);
 	});
 
 	test("rejects unbounded or secret-like metric labels", () => {

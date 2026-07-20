@@ -279,9 +279,9 @@ export class ClusterInfrastructureProjection {
 		const authoritative = decodeSessionRef(value, `authority.${clusterSessionId}`);
 		const previous = this.#authoritativeSessions.get(clusterSessionId);
 		if (previous && JSON.stringify(previous) === JSON.stringify(authoritative)) return;
+		const projected = this.#session(resource, authoritative);
 		this.#authoritativeSessions.set(clusterSessionId, authoritative);
 		this.#sessionSequence++;
-		const projected = this.#session(resource, authoritative);
 		for (const waiter of this.#authorityWaiters.get(clusterSessionId) ?? []) {
 			clearTimeout(waiter.timer);
 			waiter.resolve(projected);
@@ -416,7 +416,7 @@ export class ClusterInfrastructureProjection {
 				: infrastructurePhase === "Failed" || infrastructurePhase === "Terminating"
 					? "Failed"
 					: "Starting";
-		const { cluster: _upstreamCluster, ci: _upstreamCi, ...ompLiveState } = authoritative.liveState;
+		const { cluster: _upstreamCluster, ci: _upstreamCi, ...ompLiveState } = authoritative.liveState ?? {};
 		return decodeSessionRef({
 			...authoritative,
 			hostId: this.hostId,

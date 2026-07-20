@@ -6,7 +6,7 @@ import { ClusterInfrastructureProjection } from "./kubernetes-projection.ts";
 import { KubernetesProjectionRunner } from "./kubernetes-runner.ts";
 import { ClusterMetrics, ClusterServerHealth, JsonLogger } from "./observability.ts";
 import { WebSocketPodHostConnector } from "./pod-host-router.ts";
-import { startClusterHttpServers } from "./server.ts";
+import { startClusterHttpServers, type ClusterHttpServers } from "./server.ts";
 import { SessionAuthorityRunner } from "./session-authority-runner.ts";
 import { WoodpeckerProvider } from "./woodpecker.ts";
 
@@ -33,55 +33,60 @@ export async function runClusterServer(env: Readonly<Record<string, string | und
 			logger.warn("Kubernetes watch reconnecting", { condition: error instanceof Error ? error.name : "unknown", result: "failure" });
 		},
 	});
-	await runner.start();
-	const connector = new WebSocketPodHostConnector({ internalToken: config.internalToken });
-	const authority = new SessionAuthorityRunner({
-		projection,
-		connector,
-		onError: error => logger.warn("session authority reconnecting", { condition: error instanceof Error ? error.name : "unknown", result: "failure" }),
-	});
-	authority.start();
-	const ciProvider = config.woodpecker ? new WoodpeckerProvider(config.woodpecker) : undefined;
-	const gateway = new ClusterGateway({
-		projection,
-		connector,
-		mutations: new KubernetesGatewayMutationBackend({ client: kubernetes, hostRef: config.hostName }),
-		internalToken: config.internalToken,
-		...(ciProvider ? { ciProvider } : {}),
-	});
-	const servers = startClusterHttpServers({
-		gateway,
-		projection,
-		gatewayPort: config.gatewayPort,
-		adminPort: config.adminPort,
-		trustedProxyAddresses: config.trustedProxyAddresses,
-		trustedProxyCidrs: config.trustedProxyCidrs,
-		health,
-		metrics,
-		logger,
-	});
 	const stopped = Promise.withResolvers<void>();
-	let stopping = false;
-	const stop = (): void => {
-		if (stopping) return;
-		stopping = true;
-		void (async () => {
-			await servers.drain();
-			await authority.stop();
-			await runner.stop();
-			await servers.stop();
-		})().then(stopped.resolve, stopped.reject);
-	};
-	process.once("SIGTERM", stop);
-	process.once("SIGINT", stop);
-	try { await stopped.promise; }
-	finally {
-		process.off("SIGTERM", stop);
-		process.off("SIGINT", stop);
-		if (!stopping) {
-			await servers.stop();
-			await authority.stop();
-			await runner.stop();
+	const stop = (): void => stopped.resolve();
+	let authority: SessionAuthorityRunner | undefined;
+	let servers: ClusterHttpServers | undefined;
+	let signalsInstalled = false;
+	try {
+		await runner.start();
+		const connector = new WebSocketPodHostConnector({ internalToken: config.internalToken });
+		authority = new SessionAuthorityRunner({
+			projection,
+			connector,
+			onError: error => logger.warn("session authority reconnecting", { condition: error instanceof Error ? error.name : "unknown", result: "failure" }),
+		});
+		authority.start();
+		const ciProvider = config.woodpecker ? new WoodpeckerProvider(config.woodpecker) : undefined;
+		const gateway = new ClusterGateway({
+			projection,
+			connector,
+			mutations: new KubernetesGatewayMutationBackend({ client: kubernetes, hostRef: config.hostName }),
+			internalToken: config.internalToken,
+			...(ciProvider ? { ciProvider } : {}),
+		});
+		servers = startClusterHttpServers({
+			gateway,
+			projection,
+			gatewayPort: config.gatewayPort,
+			adminPort: config.adminPort,
+			trustedProxyAddresses: config.trustedProxyAddresses,
+			trustedProxyCidrs: config.trustedProxyCidrs,
+			health,
+			metrics,
+			logger,
+		});
+		process.once("SIGTERM", stop);
+		process.once("SIGINT", stop);
+		signalsInstalled = true;
+		await stopped.promise;
+	} finally {
+		if (signalsInstalled) {
+			process.off("SIGTERM", stop);
+			process.off("SIGINT", stop);
+		}
+		try {
+			await servers?.drain();
+		} finally {
+			try {
+				await authority?.stop();
+			} finally {
+				try {
+					await runner.stop();
+				} finally {
+					await servers?.stop();
+				}
+			}
 		}
 	}
 }

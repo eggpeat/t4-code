@@ -182,6 +182,24 @@ steps:
       - corepack enable
       - pnpm --filter @t4-code/cluster-server test
       - pnpm --filter @t4-code/cluster-server typecheck
+    backend_options:
+      kubernetes:
+        serviceAccountName: woodpecker-ci-untrusted
+        resources:
+          requests:
+            cpu: "0"
+            memory: 256Mi
+            ephemeral-storage: 256Mi
+          limits:
+            cpu: "1"
+            memory: 2Gi
+            ephemeral-storage: 2Gi
+
+  cluster-wire-tests:
+    depends_on: [cluster-server-tests]
+    image: mirror.gcr.io/library/node:24.13.1-bookworm
+    commands:
+      - corepack enable
       - pnpm --filter @t4-code/host-wire test
       - pnpm --filter @t4-code/host-service test
     backend_options:
@@ -198,7 +216,7 @@ steps:
             ephemeral-storage: 2Gi
 
   cluster-operator-tests:
-    depends_on: [cluster-server-tests]
+    depends_on: [cluster-wire-tests]
     image: mirror.gcr.io/library/golang:1.25.1-bookworm
     directory: packages/cluster-operator
     commands:

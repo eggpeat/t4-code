@@ -1,8 +1,21 @@
-import { describe, expect, test } from "bun:test";
-import type { ClientFrame, ServerFrame } from "@t4-code/host-wire";
+import { describe, expect, test } from "vite-plus/test"
+import { hostId, projectId, revision, sessionId, type ClientFrame, type ServerFrame, type SessionRef } from "@t4-code/host-wire";
 import { ClusterGateway, type GatewayClient, type GatewayMutationBackend } from "../src/gateway.ts";
 import { ClusterInfrastructureProjection } from "../src/kubernetes-projection.ts";
 import type { PodHostConnection, PodHostConnector, PodHostRoute } from "../src/pod-host-router.ts";
+
+const PRINCIPAL = "owner@example.com";
+function authority(upstreamSessionId: string): SessionRef {
+	return {
+		hostId: hostId("session-pod"),
+		sessionId: sessionId(upstreamSessionId),
+		project: { projectId: projectId("t4-code"), name: "T4 code" },
+		revision: revision("authority-r1"),
+		title: "Authoritative OMP session",
+		status: "idle",
+		updatedAt: "2026-07-20T00:00:00.000Z",
+	};
+}
 
 const host = {
 	apiVersion: "cluster.t4.dev/v1alpha1",
@@ -14,14 +27,14 @@ const workspace = {
 	apiVersion: "cluster.t4.dev/v1alpha1",
 	kind: "T4Workspace",
 	metadata: { name: "workspace-one", uid: "workspace-uid", resourceVersion: "11", generation: 1 },
-	spec: { displayName: "Workspace one", retentionPolicy: "Retain", size: "20Gi" },
+	spec: { hostRef: "primary", owner: PRINCIPAL, displayName: "Workspace one", retentionPolicy: "Retain", size: "20Gi" },
 	status: { observedGeneration: 1, phase: "Ready", conditions: [] },
 };
 const session = (name: string, upstream: string, previewId?: string) => ({
 	apiVersion: "cluster.t4.dev/v1alpha1",
 	kind: "T4Session",
 	metadata: { name, uid: `${name}-uid`, resourceVersion: name === "session-one" ? "12" : "13", generation: 1 },
-	spec: { workspaceRef: "workspace-one", title: name, runtimeProfile: "omp-17.0.5", gui: { enabled: true } },
+	spec: { hostRef: "primary", workspaceRef: "workspace-one", title: name, runtimeProfile: "omp-17.0.5", gui: { enabled: true } },
 	status: {
 		observedGeneration: 1,
 		phase: "Running",
@@ -77,11 +90,13 @@ function setup(epoch = "replica-uid-1") {
 		sessions: [session("session-one", "omp-private-one", "preview-one"), session("session-two", "omp-private-two")],
 		resourceVersion: "13",
 	});
+	projection.setSessionAuthority("session-one", authority("omp-private-one"));
+	projection.setSessionAuthority("session-two", authority("omp-private-two"));
 	const connector = new MemoryConnector();
 	const mutations = new MemoryMutations();
 	const gateway = new ClusterGateway({ projection, connector, mutations, internalToken: "x".repeat(32) });
 	const client = new MemoryClient();
-	const connection = gateway.connect(client);
+	const connection = gateway.connect(client, PRINCIPAL);
 	return { projection, connector, mutations, gateway, client, connection };
 }
 

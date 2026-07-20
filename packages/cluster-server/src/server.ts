@@ -37,6 +37,14 @@ function trustedProxyMatcher(addresses: readonly string[], cidrs: readonly strin
 	};
 }
 
+export function isLoopbackAddress(address: string): boolean {
+	const normalized = normalizeIpAddress(address);
+	if (normalized === "::1") return true;
+	if (isIP(normalized) !== 4) return false;
+	const firstOctet = Number(normalized.split(".", 1)[0]);
+	return firstOctet === 127;
+}
+
 function gatewayPrincipal(request: Request, remoteAddress: string, trustedSource: (address: string) => boolean): string | undefined {
 	if (!trustedSource(remoteAddress)) return undefined;
 	if (request.headers.get("x-forwarded-proto") !== "https") return undefined;
@@ -103,8 +111,19 @@ export function startClusterHttpServers(options: ClusterHttpServersOptions): Clu
 		await stopping;
 		options.health.markGatewayStopped();
 	};
-	const adminHandler = createAdminHandler({ health: options.health, metrics: options.metrics, drain });
-	const adminServer = Bun.serve({ hostname: "0.0.0.0", port: options.adminPort, fetch: adminHandler });
+	const adminHandler = createAdminHandler({ health: options.health, metrics: options.metrics });
+	const adminServer = Bun.serve({
+		hostname: "0.0.0.0",
+		port: options.adminPort,
+		async fetch(request, server) {
+			if (new URL(request.url).pathname !== "/drainz") return adminHandler(request);
+			if (request.method !== "POST") return new Response(null, { status: 405 });
+			const source = server.requestIP(request)?.address;
+			if (!source || !isLoopbackAddress(source)) return new Response("forbidden", { status: 403 });
+			await drain();
+			return Response.json({ draining: true }, { status: 202, headers: { "cache-control": "no-store" } });
+		},
+	});
 	options.health.markGatewayListening();
 	options.logger.info("cluster server listening", { result: "success" });
 	return {

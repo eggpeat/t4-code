@@ -1,10 +1,24 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vite-plus/test"
+import { hostId, projectId, revision, sessionId, type SessionRef } from "@t4-code/host-wire";
 import {
 	CLUSTER_MAX_SESSIONS,
 	CLUSTER_MAX_WORKSPACES,
 	ClusterInfrastructureProjection,
 	clusterHostIdFromUid,
 } from "../src/kubernetes-projection.ts";
+
+const PRINCIPAL = "owner@example.com";
+function authority(upstreamSessionId: string): SessionRef {
+	return {
+		hostId: hostId("session-pod"),
+		sessionId: sessionId(upstreamSessionId),
+		project: { projectId: projectId("t4-code"), name: "T4 code" },
+		revision: revision("authority-r1"),
+		title: "Authoritative OMP session",
+		status: "idle",
+		updatedAt: "2026-07-20T00:00:00.000Z",
+	};
+}
 
 const host = {
 	apiVersion: "cluster.t4.dev/v1alpha1",
@@ -18,6 +32,8 @@ const workspace = {
 	kind: "T4Workspace",
 	metadata: { name: "workspace-one", uid: "workspace-uid", resourceVersion: "101", generation: 3 },
 	spec: {
+		hostRef: "primary",
+		owner: PRINCIPAL,
 		displayName: "T4 code",
 		retentionPolicy: "Retain",
 		storageClass: "t4-workspaces-rwx",
@@ -37,6 +53,7 @@ const session = {
 	kind: "T4Session",
 	metadata: { name: "session-one", uid: "session-uid", resourceVersion: "102", generation: 5 },
 	spec: {
+		hostRef: "primary",
 		workspaceRef: "workspace-one",
 		title: "Cluster task",
 		runtimeProfile: "omp-17.0.5",
@@ -103,6 +120,7 @@ describe("Kubernetes infrastructure projection", () => {
 	test("projects routable pod authority and removes deleted sessions without local truth", () => {
 		const projection = new ClusterInfrastructureProjection({ epoch: "replica-uid-1", namespace: "development" });
 		projection.replace({ host, workspaces: [workspace], sessions: [session], resourceVersion: "102" });
+		projection.setSessionAuthority("session-one", authority("omp-session-private"));
 		expect(projection.sessionRoute("session-one")).toEqual({
 			clusterSessionId: "session-one",
 			upstreamSessionId: "omp-session-private",
