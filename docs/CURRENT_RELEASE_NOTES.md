@@ -14,6 +14,16 @@ When a bundled OMP upgrade temporarily fails to stop the existing macOS service,
 
 The bundled backend now also recovers from an inactive Unix socket when the crashed owner's process ID still appears alive. It confirms the endpoint is unreachable more than once and revalidates every ownership file before reclaiming it, while leaving a responsive backend untouched.
 
+## Native Browser workspace
+
+The desktop app now includes a built-in Browser workspace that is distinct from the existing host-backed Browser Preview workspace. Its tabs expose stable native surface state for navigation and rendering. New tabs use the credential-isolated `isolated-session` profile. Authenticated profiles are never selected automatically: each use requires the exact user-selected profile with explicit opt-in.
+
+Native Browser automation is bounded to its surface contract. Touch input is currently unsupported and returns a capability error. The desktop closes native Browser surfaces and releases their supporting controllers when the renderer reloads, the window closes, or the app stops.
+
+## Host Browser Preview workspace
+
+Session-linked Host Browser Previews continue to open in their dedicated workspace. The client projects bounded, sanitized preview state from the host, maps pointer and keyboard input through explicit permission gates, and uses leases so two clients cannot silently control the same preview at once. Preview activity records origins and paths without storing query strings, page pixels, credentials, or backend error text.
+
 ## Runtime provenance
 
 T4 Code v0.1.30 vendors app-wire 0.6.2 from integration commit [04229b1f](https://github.com/lyc-aon/oh-my-pi/commit/04229b1f46547ac7c0617e55a993496ec9725f46), source tree `8400a3af618e8af11cccf6b20aadcf3a22baf9a1`. The client contract remains `omp-app/1`.
