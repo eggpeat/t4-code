@@ -127,6 +127,21 @@ func (r *WorkspaceReconciler) reconcileDelete(ctx context.Context, workspace *cl
 	if !reflect.DeepEqual(originalStatus, workspace.Status) {
 		if err := r.Status().Update(ctx, workspace); err != nil { return ctrl.Result{}, err }
 	}
+	var sessions clusterv1alpha1.T4SessionList
+	if err := r.List(ctx, &sessions, client.InNamespace(workspace.Namespace)); err != nil { return ctrl.Result{}, err }
+	remainingSessions := 0
+	for i := range sessions.Items {
+		if sessions.Items[i].Spec.WorkspaceRef == workspace.Name { remainingSessions++ }
+	}
+	if remainingSessions > 0 {
+		before := workspace.Status
+		if workspace.Status.Conditions != nil { before.Conditions = append([]metav1.Condition(nil), workspace.Status.Conditions...) }
+		meta.SetStatusCondition(&workspace.Status.Conditions, condition("Ready", metav1.ConditionFalse, "SessionsRemain", fmt.Sprintf("workspace deletion is waiting for %d session resources", remainingSessions), workspace.Generation))
+		if !reflect.DeepEqual(before, workspace.Status) {
+			if err := r.Status().Update(ctx, workspace); err != nil { return ctrl.Result{}, err }
+		}
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
 	pvcKey := types.NamespacedName{Namespace: workspace.Namespace, Name: WorkspacePVCName(workspace)}
 	var pvc corev1.PersistentVolumeClaim
 	err := r.Get(ctx, pvcKey, &pvc)

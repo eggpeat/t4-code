@@ -135,6 +135,33 @@ func TestRetainDeletionOrphansPVCBeforeRemovingFinalizer(t *testing.T) {
 	}
 }
 
+func TestWorkspaceDeletionWaitsForSessionResources(t *testing.T) {
+	scheme := testScheme(t)
+	workspace := testWorkspace(clusterv1alpha1.RetentionPolicyRetain)
+	workspace.UID = "workspace-uid"
+	workspace.Finalizers = []string{clusterv1alpha1.WorkspaceFinalizer}
+	pvc := &corev1.PersistentVolumeClaim{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: controllers.WorkspacePVCName(workspace), Namespace: workspace.Namespace,
+			OwnerReferences: []metav1.OwnerReference{{APIVersion: clusterv1alpha1.GroupVersion.String(), Kind: "T4Workspace", Name: workspace.Name, UID: workspace.UID, Controller: ptr(true)}},
+		},
+		Spec: corev1.PersistentVolumeClaimSpec{AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany}},
+	}
+	session := testSession()
+	session.Spec.WorkspaceRef = workspace.Name
+	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&clusterv1alpha1.T4Workspace{}).WithObjects(workspace, pvc, session).Build()
+	if err := c.Delete(context.Background(), workspace); err != nil { t.Fatal(err) }
+	r := &controllers.WorkspaceReconciler{Client: c, Scheme: scheme}
+	if _, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(workspace)}); err != nil { t.Fatal(err) }
+	var waiting clusterv1alpha1.T4Workspace
+	if err := c.Get(context.Background(), client.ObjectKeyFromObject(workspace), &waiting); err != nil { t.Fatalf("workspace deletion did not wait: %v", err) }
+	condition := findCondition(waiting.Status.Conditions, "Ready")
+	if condition == nil || condition.Reason != "SessionsRemain" { t.Fatalf("Ready = %#v, want SessionsRemain", condition) }
+	var retained corev1.PersistentVolumeClaim
+	if err := c.Get(context.Background(), client.ObjectKeyFromObject(pvc), &retained); err != nil { t.Fatalf("workspace PVC changed during wait: %v", err) }
+	if len(retained.OwnerReferences) != 1 { t.Fatalf("workspace PVC was orphaned before sessions exited: %#v", retained.OwnerReferences) }
+}
+
 func TestSessionWaitsForBoundRWXThenCreatesExactlyOnePodAndService(t *testing.T) {
 	scheme := testScheme(t)
 	workspace := testWorkspace(clusterv1alpha1.RetentionPolicyDelete)
