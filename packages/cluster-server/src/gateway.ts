@@ -84,7 +84,7 @@ interface PendingConfirmation { readonly command: CommandFrame; readonly expires
 interface RoutedPodConnection { readonly route: PodHostRoute; readonly pending: Promise<PodHostConnection>; }
 
 function validPrincipal(value: string): boolean {
-	return value.length > 0 && new TextEncoder().encode(value).byteLength <= 256 && !/[\u0000-\u001f\u007f]/u.test(value) && value === value.trim();
+	return value.length > 0 && new TextEncoder().encode(value).byteLength <= 256 && !/\p{Cc}/u.test(value) && value === value.trim();
 }
 export class ClusterGateway {
 	readonly #projection: ClusterInfrastructureProjection;

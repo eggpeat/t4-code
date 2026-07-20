@@ -101,7 +101,7 @@ function serviceName(value: unknown): string | undefined {
 }
 function workspaceOwner(resource: KubernetesResource): string | undefined {
 	const owner = record(resource.spec).owner;
-	if (typeof owner !== "string" || owner.length === 0 || new TextEncoder().encode(owner).byteLength > 256 || /[\u0000-\u001f\u007f]/u.test(owner)) return undefined;
+	if (typeof owner !== "string" || owner.length === 0 || new TextEncoder().encode(owner).byteLength > 256 || /\p{Cc}/u.test(owner)) return undefined;
 	return owner;
 }
 function ciSelection(resource: KubernetesResource): { readonly repositoryId: string; readonly ref: string; readonly commit: string } | undefined {

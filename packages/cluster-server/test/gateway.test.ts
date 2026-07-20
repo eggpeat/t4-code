@@ -39,7 +39,7 @@ const workspace = {
 	spec: { hostRef: "primary", owner: PRINCIPAL, displayName: "Workspace one", retentionPolicy: "Retain", size: "20Gi" },
 	status: { observedGeneration: 1, phase: "Ready", conditions: [] },
 };
-const session = (name: string, upstream: string) => ({
+const session = (name: string) => ({
 	apiVersion: "cluster.t4.dev/v1alpha1",
 	kind: "T4Session",
 	metadata: { name, uid: `${name}-uid`, resourceVersion: name === "session-one" ? "12" : "13", generation: 1 },
@@ -93,7 +93,7 @@ function setup(epoch = "replica-uid-1") {
 	projection.replace({
 		host,
 		workspaces: [workspace],
-		sessions: [session("session-one", "omp-private-one"), session("session-two", "omp-private-two")],
+		sessions: [session("session-one"), session("session-two")],
 		resourceVersion: "13",
 	});
 	projection.setSessionAuthority("session-one", authority("omp-private-one"));
@@ -241,7 +241,7 @@ describe("stateless omp-app cluster gateway", () => {
 		const value = setup();
 		value.projection.applyWatch({
 			type: "MODIFIED",
-			object: { ...session("session-one", "omp-private-one"), metadata: { ...session("session-one", "omp-private-one").metadata, resourceVersion: "30" }, spec: { ...session("session-one", "omp-private-one").spec, guiEnabled: false } },
+			object: { ...session("session-one"), metadata: { ...session("session-one").metadata, resourceVersion: "30" }, spec: { ...session("session-one").spec, guiEnabled: false } },
 		});
 		await value.connection.receive(hello);
 		await value.connection.receive({
@@ -254,7 +254,7 @@ describe("stateless omp-app cluster gateway", () => {
 
 	it("treats an already absent session delete as an idempotent success", async () => {
 		const value = setup();
-		value.projection.applyWatch({ type: "DELETED", object: session("session-one", "omp-private-one") });
+		value.projection.applyWatch({ type: "DELETED", object: session("session-one") });
 		await value.connection.receive(hello);
 		await value.connection.receive({
 			v: "omp-app/1", type: "command", requestId: "request-delete-replay", commandId: "command-delete-replay",

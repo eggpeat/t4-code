@@ -49,7 +49,7 @@ function gatewayPrincipal(request: Request, remoteAddress: string, trustedSource
 	if (!trustedSource(remoteAddress)) return undefined;
 	if (request.headers.get("x-forwarded-proto") !== "https") return undefined;
 	const principal = request.headers.get("tailscale-user-login") ?? request.headers.get("tailscale-user-name");
-	if (!principal || principal !== principal.trim() || new TextEncoder().encode(principal).byteLength > 256 || /[\u0000-\u001f\u007f]/u.test(principal)) return undefined;
+	if (!principal || principal !== principal.trim() || new TextEncoder().encode(principal).byteLength > 256 || /\p{Cc}/u.test(principal)) return undefined;
 	return principal;
 }
 

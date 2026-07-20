@@ -1,5 +1,5 @@
 import { mkdir, readFile, readdir, rename, writeFile } from "node:fs/promises";
-import { basename, resolve } from "node:path";
+import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {

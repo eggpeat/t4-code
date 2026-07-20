@@ -48,7 +48,7 @@ export function clusterWebSocketUrl(baseUrl) {
 }
 
 function boundedId(value, label) {
-  if (typeof value !== "string" || value.length < 1 || value.length > 253 || /[\u0000-\u001f\u007f]/u.test(value)) {
+  if (typeof value !== "string" || value.length < 1 || value.length > 253 || /\p{Cc}/u.test(value)) {
     throw new Error(`${label} is not a bounded identifier`);
   }
   return value;

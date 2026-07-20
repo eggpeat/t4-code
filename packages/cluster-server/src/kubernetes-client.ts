@@ -25,10 +25,6 @@ export interface KubernetesApiClientOptions {
 	readonly ca?: string;
 	readonly fetch?: typeof globalThis.fetch;
 }
-interface KubernetesList {
-	readonly metadata?: { readonly resourceVersion?: string };
-	readonly items?: readonly KubernetesResource[];
-}
 
 function canonical(value: unknown): unknown {
 	if (Array.isArray(value)) return value.map(canonical);
@@ -340,7 +336,7 @@ export class KubernetesGatewayMutationBackend {
 	}
 
 	#validatePrincipal(principal: string): void {
-		if (!principal || new TextEncoder().encode(principal).byteLength > 256 || /[\u0000-\u001f\u007f]/u.test(principal) || principal !== principal.trim())
+		if (!principal || new TextEncoder().encode(principal).byteLength > 256 || /\p{Cc}/u.test(principal) || principal !== principal.trim())
 			throw new Error("gateway principal is invalid");
 	}
 	#assertWorkspaceOwner(workspace: KubernetesResource, principal: string): void {

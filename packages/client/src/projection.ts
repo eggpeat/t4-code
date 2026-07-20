@@ -1899,7 +1899,7 @@ export class ProjectionStore {
     this.mutationGeneration += 1;
     this.current = next;
     this.queueCacheSave();
-    for (const listener of [...this.listeners]) {
+    for (const listener of Array.from(this.listeners)) {
       try {
         listener(next);
       } catch {
@@ -1946,7 +1946,7 @@ export class ProjectionStore {
     this.mutationGeneration += 1;
     this.current = next;
     this.queueCacheSave();
-    for (const listener of [...this.listeners]) {
+    for (const listener of Array.from(this.listeners)) {
       try {
         listener(next);
       } catch {

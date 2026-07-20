@@ -55,7 +55,7 @@ function apiBase(value: string): string {
 	return url.href.replace(/\/$/u, "");
 }
 function bounded(value: unknown, name: string, max: number): string {
-	if (typeof value !== "string" || value.length === 0 || new TextEncoder().encode(value).byteLength > max || /[\u0000-\u001f\u007f]/u.test(value))
+	if (typeof value !== "string" || value.length === 0 || new TextEncoder().encode(value).byteLength > max || /\p{Cc}/u.test(value))
 		throw new Error(`${name} is invalid`);
 	return value;
 }
