@@ -521,10 +521,12 @@ test.describe("OMP/T4 cluster GUI boundaries", () => {
     await expect(page.getByRole("textbox", { name: "URL" })).toHaveValue(GUI_PREVIEW.url);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     expect(
-      await page.evaluate(() =>
-        getComputedStyle(document.documentElement).getPropertyValue("--motion-duration-fast").trim(),
+      Number.parseFloat(
+        await page.evaluate(() =>
+          getComputedStyle(document.documentElement).getPropertyValue("--motion-duration-fast").trim(),
+        ),
       ),
-    ).toBe("0ms");
+    ).toBe(0);
     await recordScenario(
       page,
       "mobile-viewport",
