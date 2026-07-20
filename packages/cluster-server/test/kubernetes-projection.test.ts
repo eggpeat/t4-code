@@ -1,0 +1,135 @@
+import { describe, expect, test } from "bun:test";
+import {
+	CLUSTER_MAX_SESSIONS,
+	CLUSTER_MAX_WORKSPACES,
+	ClusterInfrastructureProjection,
+	clusterHostIdFromUid,
+} from "../src/kubernetes-projection.ts";
+
+const host = {
+	apiVersion: "cluster.t4.dev/v1alpha1",
+	kind: "T4ClusterHost",
+	metadata: { name: "primary", uid: "24e7bcb1-c694-4ba4-85c4-70a829f7996b", resourceVersion: "100", generation: 2 },
+	spec: {},
+	status: { observedGeneration: 2, conditions: [{ type: "Available", status: "True", reason: "Ready", message: "ready", observedGeneration: 2 }] },
+};
+const workspace = {
+	apiVersion: "cluster.t4.dev/v1alpha1",
+	kind: "T4Workspace",
+	metadata: { name: "workspace-one", uid: "workspace-uid", resourceVersion: "101", generation: 3 },
+	spec: {
+		displayName: "T4 code",
+		retentionPolicy: "Retain",
+		storageClass: "t4-workspaces-rwx",
+		size: "20Gi",
+		repository: { id: "t4-code", ref: "refs/heads/main", commit: "abc", credentialPath: "/secret" },
+	},
+	status: {
+		observedGeneration: 3,
+		phase: "Ready",
+		capacity: "20Gi",
+		conditions: [{ type: "StorageReady", status: "True", reason: "Bound", message: "PVC is bound", observedGeneration: 3 }],
+		pvcRef: "workspace-one",
+	},
+};
+const session = {
+	apiVersion: "cluster.t4.dev/v1alpha1",
+	kind: "T4Session",
+	metadata: { name: "session-one", uid: "session-uid", resourceVersion: "102", generation: 5 },
+	spec: {
+		workspaceRef: "workspace-one",
+		title: "Cluster task",
+		runtimeProfile: "omp-17.0.5",
+		gui: { enabled: true },
+		ci: { repositoryId: "t4-code", ref: "refs/heads/main", commit: "abc" },
+	},
+	status: {
+		observedGeneration: 5,
+		phase: "Running",
+		podRef: "session-one-pod",
+		serviceRef: "session-one",
+		upstreamSessionId: "omp-session-private",
+		previewId: "preview-one",
+		guiState: "Ready",
+		conditions: [{ type: "Available", status: "True", reason: "PodReady", message: "ready", observedGeneration: 5 }],
+	},
+};
+
+describe("Kubernetes infrastructure projection", () => {
+	test("derives a stable host id from the T4ClusterHost UID and bounded list state", () => {
+		expect(clusterHostIdFromUid(host.metadata.uid)).toBe("cluster:24e7bcb1-c694-4ba4-85c4-70a829f7996b");
+		expect(CLUSTER_MAX_WORKSPACES).toBe(256);
+		expect(CLUSTER_MAX_SESSIONS).toBe(1_000);
+		const projection = new ClusterInfrastructureProjection({ epoch: "replica-uid-1", namespace: "development" });
+		projection.replace({ host, workspaces: [workspace], sessions: [session], resourceVersion: "102" });
+		expect(projection.hostId).toBe(clusterHostIdFromUid(host.metadata.uid));
+		expect(projection.workspaceList()).toEqual({
+			cursor: { epoch: "replica-uid-1", seq: 1 },
+			workspaces: [
+				expect.objectContaining({
+					id: "workspace-one",
+					phase: "Ready",
+					accessMode: "ReadWriteMany",
+					retentionPolicy: "Retain",
+				}),
+			],
+		});
+		expect(JSON.stringify(projection.workspaceList())).not.toContain("credentialPath");
+		expect(JSON.stringify(projection.workspaceList())).not.toContain("pvcRef");
+	});
+
+	test("keeps workspace cursors separate and reconnect replacement idempotent", () => {
+		const projection = new ClusterInfrastructureProjection({ epoch: "replica-uid-1", namespace: "development" });
+		projection.replace({ host, workspaces: [workspace], sessions: [session], resourceVersion: "102" });
+		const seen: unknown[] = [];
+		const stop = projection.subscribe(frame => seen.push(frame), projection.workspaceCursor);
+		projection.applyWatch({ type: "MODIFIED", object: { ...session, metadata: { ...session.metadata, resourceVersion: "103" } } });
+		expect(seen).toHaveLength(0);
+		projection.applyWatch({
+			type: "MODIFIED",
+			object: {
+				...workspace,
+				metadata: { ...workspace.metadata, resourceVersion: "104", generation: 4 },
+				status: { ...workspace.status, observedGeneration: 4, phase: "Failed" },
+			},
+		});
+		expect(seen).toHaveLength(1);
+		expect(seen[0]).toMatchObject({ type: "workspace.state", workspaceId: "workspace-one", cursor: { seq: 2 } });
+		projection.applyWatch({ type: "MODIFIED", object: { ...workspace, metadata: { ...workspace.metadata, resourceVersion: "104" } } });
+		expect(seen).toHaveLength(1);
+		stop();
+	});
+
+	test("projects routable pod authority and removes deleted sessions without local truth", () => {
+		const projection = new ClusterInfrastructureProjection({ epoch: "replica-uid-1", namespace: "development" });
+		projection.replace({ host, workspaces: [workspace], sessions: [session], resourceVersion: "102" });
+		expect(projection.sessionRoute("session-one")).toEqual({
+			clusterSessionId: "session-one",
+			upstreamSessionId: "omp-session-private",
+			url: "ws://session-one.development.svc:8787/v1/ws",
+		});
+		expect(projection.sessionRefs()).toEqual([
+			expect.objectContaining({
+				hostId: clusterHostIdFromUid(host.metadata.uid),
+				sessionId: "session-one",
+				liveState: expect.objectContaining({
+					cluster: expect.objectContaining({ workspaceId: "workspace-one", phase: "Running" }),
+				}),
+			}),
+		]);
+		projection.applyWatch({ type: "DELETED", object: session });
+		expect(projection.sessionRoute("session-one")).toBeUndefined();
+		expect(projection.sessionRefs()).toEqual([]);
+	});
+
+	test("fails closed at explicit projection limits", () => {
+		const projection = new ClusterInfrastructureProjection({
+			epoch: "replica-uid-1",
+			namespace: "development",
+			maxWorkspaces: 1,
+			maxSessions: 1,
+		});
+		expect(() => projection.replace({ host, workspaces: [workspace, { ...workspace, metadata: { ...workspace.metadata, name: "two" } }], sessions: [], resourceVersion: "1" })).toThrow("workspace projection limit");
+		expect(() => projection.replace({ host, workspaces: [], sessions: [session, { ...session, metadata: { ...session.metadata, name: "two" } }], resourceVersion: "1" })).toThrow("session projection limit");
+	});
+});

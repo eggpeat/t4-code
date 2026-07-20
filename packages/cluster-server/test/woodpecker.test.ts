@@ -1,0 +1,111 @@
+import { describe, expect, test } from "bun:test";
+import { WoodpeckerProvider, mapWoodpeckerPipeline } from "../src/woodpecker.ts";
+
+const correlation = {
+	sessionId: "session-one",
+	repositoryId: "t4-code",
+	ref: "refs/heads/agent/t4-cluster-operator",
+	commit: "0123456789abcdef0123456789abcdef01234567",
+};
+const pipeline = {
+	number: 42,
+	status: "running",
+	ref: correlation.ref,
+	branch: "agent/t4-cluster-operator",
+	commit: correlation.commit,
+	created: 1_773_964_800,
+	started: 1_773_964_810,
+	finished: 0,
+	variables: { T4_SESSION_ID: correlation.sessionId },
+	stages: [
+		{ name: "clone", status: "success" },
+		{ name: "test", status: "running" },
+	],
+};
+
+function provider(fetch: typeof globalThis.fetch) {
+	return new WoodpeckerProvider({
+		baseUrl: "https://ci.example.test",
+		token: "secret-from-kubernetes",
+		repositories: { "t4-code": { slug: "owner/t4-code" } },
+		fetch,
+	});
+}
+
+describe("bounded Woodpecker provider", () => {
+	test("maps only allowlisted categorical pipeline state and canonical HTTPS links", () => {
+		expect(mapWoodpeckerPipeline(pipeline, correlation, "https://ci.example.test/repos/owner/t4-code/pipeline/42")).toEqual({
+			provider: "woodpecker",
+			correlation: "exact",
+			repositoryId: "t4-code",
+			ref: correlation.ref,
+			commit: correlation.commit,
+			pipelineNumber: 42,
+			status: "running",
+			currentStage: "test",
+			createdAt: "2026-03-20T00:00:00.000Z",
+			startedAt: "2026-03-20T00:00:10.000Z",
+			link: "https://ci.example.test/repos/owner/t4-code/pipeline/42",
+		});
+		for (const [raw, mapped] of [
+			["pending", "queued"], ["queued", "queued"], ["running", "running"], ["success", "success"],
+			["failure", "failure"], ["error", "failure"], ["killed", "killed"], ["blocked", "unknown"],
+		] as const) expect(mapWoodpeckerPipeline({ ...pipeline, status: raw }, correlation).status).toBe(mapped);
+	});
+
+	test("queries exact repository/ref/commit/session correlation and deduplicates before trigger", async () => {
+		const requests: Array<{ url: string; init?: RequestInit }> = [];
+		const fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+			requests.push({ url: String(input), init });
+			return Response.json([pipeline]);
+		}) as typeof globalThis.fetch;
+		const result = await provider(fetch).run(correlation);
+		expect(result).toMatchObject({ triggered: false, pipelineNumber: 42, status: "running" });
+		expect(requests).toHaveLength(1);
+		expect(requests[0]?.url).toBe("https://ci.example.test/api/repos/owner%2Ft4-code/pipelines?ref=refs%2Fheads%2Fagent%2Ft4-cluster-operator&commit=0123456789abcdef0123456789abcdef01234567&limit=100");
+		expect(requests[0]?.init?.headers).toMatchObject({ Authorization: "Bearer secret-from-kubernetes" });
+		expect(JSON.stringify(result)).not.toContain("secret-from-kubernetes");
+	});
+
+	test("ignores approximate matches, triggers once with server-resolved URL, and re-queries before retry", async () => {
+		const requests: Array<{ url: string; init?: RequestInit }> = [];
+		let query = 0;
+		const fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+			requests.push({ url: String(input), init });
+			if (!init?.method || init.method === "GET") {
+				query++;
+				return Response.json(query === 1 ? [{ ...pipeline, variables: { T4_SESSION_ID: "another-session" } }] : [pipeline]);
+			}
+			return Response.json(pipeline, { status: 201 });
+		}) as typeof globalThis.fetch;
+		const woodpecker = provider(fetch);
+		const first = await woodpecker.run(correlation);
+		expect(first.triggered).toBe(true);
+		const post = requests.find(request => request.init?.method === "POST");
+		expect(post?.url).toBe("https://ci.example.test/api/repos/owner%2Ft4-code/pipelines");
+		expect(JSON.parse(String(post?.init?.body))).toEqual({
+			ref: correlation.ref,
+			commit: correlation.commit,
+			event: "manual",
+			variables: { T4_SESSION_ID: correlation.sessionId },
+		});
+		const second = await woodpecker.run(correlation);
+		expect(second).toMatchObject({ triggered: false, pipelineNumber: 42 });
+		expect(requests.filter(request => request.init?.method === "POST")).toHaveLength(1);
+	});
+
+	test("fails closed for unconfigured repositories, insecure provider URLs, oversized replies, and unknown correlation", async () => {
+		expect(() => new WoodpeckerProvider({ baseUrl: "http://ci.example.test", token: "secret", repositories: {} })).toThrow("HTTPS");
+		const fetch = (async () => Response.json(Array.from({ length: 101 }, () => pipeline))) as typeof globalThis.fetch;
+		await expect(provider(fetch).query(correlation)).rejects.toThrow("pipeline response limit");
+		await expect(provider(fetch).query({ ...correlation, repositoryId: "not-allowed" })).rejects.toThrow("not allowlisted");
+		const unknown = await provider((async () => Response.json([])) as typeof globalThis.fetch).query(correlation);
+		expect(unknown).toEqual({
+			provider: "woodpecker",
+			correlation: "unknown",
+			repositoryId: "t4-code",
+			ref: correlation.ref,
+			commit: correlation.commit,
+		});
+	});
+});
