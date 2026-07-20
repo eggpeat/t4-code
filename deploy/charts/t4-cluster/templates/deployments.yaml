@@ -1,0 +1,272 @@
+{{- if .Values.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "t4-cluster.fullname" . }}-controller
+  labels:
+    {{- include "t4-cluster.labels" . | nindent 4 }}
+    app.kubernetes.io/component: controller
+spec:
+  replicas: {{ .Values.controller.replicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  selector:
+    matchLabels:
+      {{- include "t4-cluster.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: controller
+  template:
+    metadata:
+      labels:
+        {{- include "t4-cluster.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: controller
+        app.kubernetes.io/part-of: t4-cluster
+    spec:
+      serviceAccountName: {{ include "t4-cluster.fullname" . }}-controller
+      automountServiceAccountToken: true
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: NotIn
+                    values: [k3s-worker-02]
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    {{- include "t4-cluster.selectorLabels" . | nindent 20 }}
+                    app.kubernetes.io/component: controller
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              {{- include "t4-cluster.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: controller
+      containers:
+        - name: controller
+          image: {{ include "t4-cluster.image" .Values.images.controller }}
+          imagePullPolicy: {{ .Values.images.controller.pullPolicy }}
+          args: [--zap-log-level=info]
+          env:
+            - name: POD_NAMESPACE
+              valueFrom: {fieldRef: {fieldPath: metadata.namespace}}
+            - name: T4_SESSION_RUNTIME_IMAGE
+              value: {{ include "t4-cluster.image" .Values.images.sessionRuntime }}
+            - name: T4_INTERNAL_AUTH_SECRET
+              value: {{ .Values.internalAuth.secretName }}
+            - name: T4_SESSION_EXCLUDED_NODES
+              value: {{ join "," .Values.session.nodeExclude | quote }}
+            - name: T4_SESSION_REQUEST_CPU
+              value: {{ .Values.session.resources.requests.cpu | quote }}
+            - name: T4_SESSION_REQUEST_MEMORY
+              value: {{ .Values.session.resources.requests.memory | quote }}
+            - name: T4_SESSION_LIMIT_CPU
+              value: {{ .Values.session.resources.limits.cpu | quote }}
+            - name: T4_SESSION_LIMIT_MEMORY
+              value: {{ .Values.session.resources.limits.memory | quote }}
+            - name: T4_SESSION_SHM_SIZE
+              value: {{ .Values.session.sharedMemorySize | quote }}
+            - name: T4_SESSION_TEMPORARY_SIZE
+              value: {{ .Values.session.temporarySize | quote }}
+          ports:
+            - name: metrics
+              containerPort: 8080
+            - name: health
+              containerPort: 8081
+          startupProbe:
+            httpGet: {path: /healthz, port: health}
+            failureThreshold: 30
+            periodSeconds: 2
+          readinessProbe:
+            httpGet: {path: /readyz, port: health}
+            failureThreshold: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /healthz, port: health}
+            failureThreshold: 3
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.controller.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: temporary
+              mountPath: /tmp
+      volumes:
+        - name: temporary
+          emptyDir:
+            sizeLimit: 128Mi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "t4-cluster.fullname" . }}-server
+  labels:
+    {{- include "t4-cluster.labels" . | nindent 4 }}
+    app.kubernetes.io/component: server
+spec:
+  replicas: {{ .Values.server.replicas }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  minReadySeconds: 10
+  selector:
+    matchLabels:
+      {{- include "t4-cluster.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: server
+  template:
+    metadata:
+      annotations:
+        cluster.t4.dev/pre-stop-method: POST
+        cluster.t4.dev/pre-stop-path: /drainz
+      labels:
+        {{- include "t4-cluster.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: server
+        app.kubernetes.io/part-of: t4-cluster
+    spec:
+      serviceAccountName: {{ include "t4-cluster.fullname" . }}-server
+      automountServiceAccountToken: true
+      terminationGracePeriodSeconds: {{ .Values.server.terminationGracePeriodSeconds }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: NotIn
+                    values: [k3s-worker-02]
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    {{- include "t4-cluster.selectorLabels" . | nindent 20 }}
+                    app.kubernetes.io/component: server
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              {{- include "t4-cluster.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: server
+      containers:
+        - name: server
+          image: {{ include "t4-cluster.image" .Values.images.server }}
+          imagePullPolicy: {{ .Values.images.server.pullPolicy }}
+          env:
+            - name: T4_CLUSTER_SERVER_PORT
+              value: "8080"
+            - name: T4_CLUSTER_ADMIN_PORT
+              value: "9090"
+            - name: T4_CLUSTER_HOST_NAME
+              value: {{ .Values.clusterHost.name }}
+            - name: POD_NAMESPACE
+              valueFrom: {fieldRef: {fieldPath: metadata.namespace}}
+            - name: POD_NAME
+              valueFrom: {fieldRef: {fieldPath: metadata.name}}
+            - name: POD_UID
+              valueFrom: {fieldRef: {fieldPath: metadata.uid}}
+            - name: T4_CLUSTER_INTERNAL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.internalAuth.secretName }}
+                  key: token
+            {{- if .Values.woodpecker.existingSecret }}
+            - name: T4_WOODPECKER_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.woodpecker.existingSecret }}
+                  key: {{ .Values.woodpecker.tokenKey }}
+            {{- end }}
+            {{- if .Values.woodpecker.configMap }}
+            - name: T4_WOODPECKER_BASE_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Values.woodpecker.configMap }}
+                  key: {{ .Values.woodpecker.baseURLKey }}
+            - name: T4_WOODPECKER_REPOSITORIES
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ .Values.woodpecker.configMap }}
+                  key: {{ .Values.woodpecker.repositoriesKey }}
+            {{- end }}
+          ports:
+            - name: websocket
+              containerPort: 8080
+            - name: admin
+              containerPort: 9090
+          lifecycle:
+            preStop:
+              exec:
+                command: [/usr/bin/curl, -fsS, -X, POST, http://127.0.0.1:9090/drainz]
+          startupProbe:
+            httpGet: {path: /healthz, port: admin}
+            failureThreshold: 30
+            periodSeconds: 2
+          readinessProbe:
+            httpGet: {path: /readyz, port: admin}
+            failureThreshold: 3
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: {path: /healthz, port: admin}
+            failureThreshold: 3
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.server.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            capabilities:
+              drop:
+                - ALL
+          volumeMounts:
+            - name: temporary
+              mountPath: /tmp
+      volumes:
+        - name: temporary
+          emptyDir:
+            sizeLimit: 256Mi
+{{- end }}

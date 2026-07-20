@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	apiextensions "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions"
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	structuralschema "k8s.io/apiextensions-apiserver/pkg/apiserver/schema"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -105,7 +106,11 @@ func TestCRDSchemasAreStructuralBoundedAndValidated(t *testing.T) {
 		if version.Schema == nil || version.Schema.OpenAPIV3Schema == nil {
 			t.Fatalf("%s lacks an OpenAPI schema", crd.Name)
 		}
-		if _, err := structuralschema.NewStructural(version.Schema.OpenAPIV3Schema); err != nil {
+		var internal apiextensions.JSONSchemaProps
+		if err := apiextensionsv1.Convert_v1_JSONSchemaProps_To_apiextensions_JSONSchemaProps(version.Schema.OpenAPIV3Schema, &internal, nil); err != nil {
+			t.Fatalf("convert %s schema: %v", crd.Name, err)
+		}
+		if _, err := structuralschema.NewStructural(&internal); err != nil {
 			t.Fatalf("%s is not structural: %v", crd.Name, err)
 		}
 		root := version.Schema.OpenAPIV3Schema

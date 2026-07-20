@@ -187,7 +187,7 @@ func assertCount(t *testing.T, value, needle string, want int) {
 func documentContaining(t *testing.T, rendered, needle string) string {
 	t.Helper()
 	for _, document := range strings.Split(rendered, "\n---") {
-		if strings.Contains(document, needle) {
+		if strings.Contains(document, "kind: Role\n") && strings.Contains(document, needle) {
 			return document
 		}
 	}

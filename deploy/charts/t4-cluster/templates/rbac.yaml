@@ -1,0 +1,119 @@
+{{- if .Values.enabled }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "t4-cluster.fullname" . }}-controller
+  labels:
+    {{- include "t4-cluster.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [cluster.t4.dev]
+    resources: [t4clusterhosts, t4workspaces, t4sessions]
+    verbs: [get, list, watch, update, patch]
+  - apiGroups: [cluster.t4.dev]
+    resources: [t4clusterhosts/status, t4workspaces/status, t4sessions/status]
+    verbs: [get, update, patch]
+  - apiGroups: [cluster.t4.dev]
+    resources: [t4workspaces/finalizers, t4sessions/finalizers]
+    verbs: [update]
+  - apiGroups: ['']
+    resources: [pods, services, persistentvolumeclaims]
+    verbs: [get, list, watch, create, update, patch, delete]
+  - apiGroups: ['']
+    resources: [events]
+    verbs: [create, patch]
+  - apiGroups: [coordination.k8s.io]
+    resources: [leases]
+    verbs: [get, list, watch, create, update, patch, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "t4-cluster.fullname" . }}-server
+  labels:
+    {{- include "t4-cluster.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [cluster.t4.dev]
+    resources: [t4clusterhosts]
+    verbs: [get, list, watch]
+  - apiGroups: [cluster.t4.dev]
+    resources: [t4workspaces, t4sessions]
+    verbs: [get, list, watch, create, delete]
+  - apiGroups: ['']
+    resources: [pods, services, endpoints]
+    verbs: [get, list, watch]
+  - apiGroups: [discovery.k8s.io]
+    resources: [endpointslices]
+    verbs: [get, list, watch]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "t4-cluster.fullname" . }}-storage-reader
+  labels:
+    {{- include "t4-cluster.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [storage.k8s.io]
+    resources: [storageclasses]
+    verbs: [get, list, watch]
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "t4-cluster.fullname" . }}-controller
+  labels:
+    {{- include "t4-cluster.labels" . | nindent 4 }}
+automountServiceAccountToken: true
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "t4-cluster.fullname" . }}-server
+  labels:
+    {{- include "t4-cluster.labels" . | nindent 4 }}
+automountServiceAccountToken: true
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "t4-cluster.fullname" . }}-controller
+  labels:
+    {{- include "t4-cluster.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "t4-cluster.fullname" . }}-controller
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "t4-cluster.fullname" . }}-controller
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "t4-cluster.fullname" . }}-storage-reader
+  labels:
+    {{- include "t4-cluster.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "t4-cluster.fullname" . }}-controller
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "t4-cluster.fullname" . }}-storage-reader
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "t4-cluster.fullname" . }}-server
+  labels:
+    {{- include "t4-cluster.labels" . | nindent 4 }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "t4-cluster.fullname" . }}-server
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "t4-cluster.fullname" . }}-server
+{{- end }}

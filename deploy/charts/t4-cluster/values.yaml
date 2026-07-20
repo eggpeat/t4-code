@@ -1,0 +1,106 @@
+enabled: false
+
+clusterHost:
+  name: t4-cluster
+  runtimeProfiles:
+    - default
+  allowedOrigins: []
+  projection:
+    maxWorkspaces: 1000
+    resyncSeconds: 60
+
+images:
+  controller:
+    repository: ghcr.io/lycaonllc/t4-cluster-operator
+    digest: ""
+    pullPolicy: IfNotPresent
+  server:
+    repository: ghcr.io/lycaonllc/t4-cluster-server
+    digest: ""
+    pullPolicy: IfNotPresent
+  sessionRuntime:
+    repository: ghcr.io/lycaonllc/t4-session-runtime
+    digest: ""
+    pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+controller:
+  replicas: 2
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
+
+server:
+  replicas: 3
+  terminationGracePeriodSeconds: 60
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: "2"
+      memory: 2Gi
+
+session:
+  nodeExclude:
+    - k3s-worker-02
+  resources:
+    requests:
+      cpu: 500m
+      memory: 1Gi
+    limits:
+      cpu: "4"
+      memory: 8Gi
+  sharedMemorySize: 1Gi
+  temporarySize: 2Gi
+
+storage:
+  # Required when enabled. The administrator creates this backend-neutral RWX StorageClass.
+  adminRWXStorageClass: ""
+
+internalAuth:
+  # Fixed default shared by the gateway and controller-created session pods.
+  secretName: t4-cluster-internal-auth
+
+woodpecker:
+  existingSecret: ""
+  tokenKey: token
+  configMap: ""
+  baseURLKey: baseURL
+  repositoriesKey: repositories
+
+ingress:
+  enabled: false
+  className: ""
+  host: ""
+  annotations: {}
+  tls:
+    secretName: ""
+
+networkPolicy:
+  enabled: true
+  # Empty lists fail closed. Supply narrow destination CIDRs for enabled components.
+  kubernetesApiCIDRs: []
+  modelRouteCIDRs: []
+  ciProviderCIDRs: []
+  gatewayIngress:
+    # Empty selectors fail closed. Set both to the ingress controller identity.
+    namespaceSelector: {}
+    podSelector: {}
+  observability:
+    namespaceSelector: {}
+    podSelector: {}
+
+observability:
+  serviceMonitor:
+    enabled: false
+    interval: 30s
+    labels: {}
+  prometheusRule:
+    enabled: false
+    labels: {}
