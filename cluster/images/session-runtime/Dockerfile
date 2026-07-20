@@ -22,11 +22,11 @@ RUN bun install --frozen-lockfile --ignore-scripts \
     && grep -R -F -q 't4-omp-authority/1' packages/coding-agent \
     && rm -rf .git
 
-FROM ${BUN_IMAGE} AS t4-build
+FROM docker.io/library/node:24.13.1-bookworm@sha256:00e9195ebd49985a6da8921f419978d85dfe354589755192dc090425ce4da2f7 AS t4-build
 WORKDIR /opt/t4
 COPY . /opt/t4
-RUN bun install --ignore-scripts --lockfile-only \
-    && bun install --frozen-lockfile --ignore-scripts
+RUN corepack enable \
+    && pnpm install --frozen-lockfile --ignore-scripts
 
 FROM ${BUN_IMAGE}
 USER root

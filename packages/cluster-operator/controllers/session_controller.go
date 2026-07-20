@@ -2,6 +2,8 @@ package controllers
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"reflect"
 	"strings"
@@ -99,37 +101,61 @@ func (r *SessionReconciler) Reconcile(ctx context.Context, request ctrl.Request)
 		"app.kubernetes.io/part-of": "t4-cluster",
 		"cluster.t4.dev/session":    podName,
 	}
+	desiredService := corev1.Service{
+		ObjectMeta: metav1.ObjectMeta{Name: serviceName, Namespace: session.Namespace, Labels: labels},
+		Spec: corev1.ServiceSpec{
+			Type:     corev1.ServiceTypeClusterIP,
+			Selector: labels,
+			Ports:    []corev1.ServicePort{{Name: "host", Port: 8787, TargetPort: intstr.FromString("host"), Protocol: corev1.ProtocolTCP}},
+		},
+	}
+	if err := controllerutil.SetControllerReference(&session, &desiredService, r.Scheme); err != nil {
+		return ctrl.Result{}, err
+	}
 	var service corev1.Service
 	if err := r.Get(ctx, types.NamespacedName{Namespace: session.Namespace, Name: serviceName}, &service); apierrors.IsNotFound(err) {
-		service = corev1.Service{
-			ObjectMeta: metav1.ObjectMeta{Name: serviceName, Namespace: session.Namespace, Labels: labels},
-			Spec: corev1.ServiceSpec{
-				Type:     corev1.ServiceTypeClusterIP,
-				Selector: labels,
-				Ports:    []corev1.ServicePort{{Name: "host", Port: 8787, TargetPort: intstr.FromString("host"), Protocol: corev1.ProtocolTCP}},
-			},
-		}
-		if err := controllerutil.SetControllerReference(&session, &service, r.Scheme); err != nil {
-			return ctrl.Result{}, err
-		}
+		service = desiredService
 		if err := r.Create(ctx, &service); err != nil && !apierrors.IsAlreadyExists(err) {
 			return ctrl.Result{}, err
 		}
 	} else if err != nil {
 		return ctrl.Result{}, err
-	}
-
-	var pod corev1.Pod
-	if err := r.Get(ctx, types.NamespacedName{Namespace: session.Namespace, Name: podName}, &pod); apierrors.IsNotFound(err) {
-		pod = r.desiredPod(&session, workspace.Status.PVCName, podName, labels)
-		if err := controllerutil.SetControllerReference(&session, &pod, r.Scheme); err != nil {
+	} else if !metav1.IsControlledBy(&service, &session) {
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, r.updateSessionFailure(ctx, &session, "Available", "ServiceOwnershipConflict", "deterministic session Service is not controlled by this session")
+	} else if !reflect.DeepEqual(service.Spec.Selector, desiredService.Spec.Selector) || !reflect.DeepEqual(service.Spec.Ports, desiredService.Spec.Ports) || !reflect.DeepEqual(service.Labels, desiredService.Labels) {
+		service.Spec.Selector = desiredService.Spec.Selector
+		service.Spec.Ports = desiredService.Spec.Ports
+		service.Labels = desiredService.Labels
+		if err := r.Update(ctx, &service); err != nil {
 			return ctrl.Result{}, err
 		}
+	}
+
+	desiredPod, err := r.desiredPod(&session, workspace.Status.PVCName, podName, labels)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	if err := controllerutil.SetControllerReference(&session, &desiredPod, r.Scheme); err != nil {
+		return ctrl.Result{}, err
+	}
+	var pod corev1.Pod
+	if err := r.Get(ctx, types.NamespacedName{Namespace: session.Namespace, Name: podName}, &pod); apierrors.IsNotFound(err) {
+		pod = desiredPod
 		if err := r.Create(ctx, &pod); err != nil && !apierrors.IsAlreadyExists(err) {
 			return ctrl.Result{}, err
 		}
 	} else if err != nil {
 		return ctrl.Result{}, err
+	} else if !metav1.IsControlledBy(&pod, &session) {
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, r.updateSessionFailure(ctx, &session, "Available", "PodOwnershipConflict", "deterministic session Pod is not controlled by this session")
+	} else if pod.Annotations[clusterv1alpha1.SessionPodSpecHashAnnotation] != desiredPod.Annotations[clusterv1alpha1.SessionPodSpecHashAnnotation] {
+		if err := r.Delete(ctx, &pod); err != nil && !apierrors.IsNotFound(err) {
+			return ctrl.Result{}, err
+		}
+		if err := r.updateSessionPending(ctx, &session, podName, serviceName, "PodSpecChanged", "session Pod is being recreated to apply immutable desired state"); err != nil {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{RequeueAfter: time.Second}, nil
 	}
 
 	original := session.Status
@@ -161,7 +187,7 @@ func (r *SessionReconciler) Reconcile(ctx context.Context, request ctrl.Request)
 	return ctrl.Result{}, nil
 }
 
-func (r *SessionReconciler) desiredPod(session *clusterv1alpha1.T4Session, pvcName, podName string, labels map[string]string) corev1.Pod {
+func (r *SessionReconciler) desiredPod(session *clusterv1alpha1.T4Session, pvcName, podName string, labels map[string]string) (corev1.Pod, error) {
 	falseValue := false
 	trueValue := true
 	runAsUser := int64(10001)
@@ -245,7 +271,7 @@ func (r *SessionReconciler) desiredPod(session *clusterv1alpha1.T4Session, pvcNa
 		container.VolumeMounts = append(container.VolumeMounts, corev1.VolumeMount{Name: "initial-prompt", MountPath: "/run/t4-initial-prompt", ReadOnly: true})
 		container.Env = append(container.Env, corev1.EnvVar{Name: "T4_INITIAL_PROMPT_FILE", Value: "/run/t4-initial-prompt/prompt"})
 	}
-	return corev1.Pod{
+	pod := corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: podName, Namespace: session.Namespace, Labels: labels},
 		Spec: corev1.PodSpec{
 			AutomountServiceAccountToken:  &falseValue,
@@ -257,6 +283,29 @@ func (r *SessionReconciler) desiredPod(session *clusterv1alpha1.T4Session, pvcNa
 			Containers:                    []corev1.Container{container}, Volumes: volumes,
 		},
 	}
+	spec, err := json.Marshal(pod.Spec)
+	if err != nil {
+		return corev1.Pod{}, fmt.Errorf("serialize desired session Pod: %w", err)
+	}
+	hash := sha256.Sum256(spec)
+	pod.Annotations = map[string]string{clusterv1alpha1.SessionPodSpecHashAnnotation: fmt.Sprintf("%x", hash)}
+	return pod, nil
+}
+
+func (r *SessionReconciler) updateSessionPending(ctx context.Context, session *clusterv1alpha1.T4Session, podName, serviceName, reason, message string) error {
+	original := session.Status
+	if session.Status.Conditions != nil {
+		original.Conditions = append([]metav1.Condition(nil), session.Status.Conditions...)
+	}
+	session.Status.ObservedGeneration = session.Generation
+	session.Status.PodName = podName
+	session.Status.ServiceName = serviceName
+	session.Status.Phase = clusterv1alpha1.InfrastructurePending
+	meta.SetStatusCondition(&session.Status.Conditions, condition("Available", metav1.ConditionFalse, reason, message, session.Generation))
+	if reflect.DeepEqual(original, session.Status) {
+		return nil
+	}
+	return r.Status().Update(ctx, session)
 }
 
 func (r *SessionReconciler) reconcileDelete(ctx context.Context, session *clusterv1alpha1.T4Session) (ctrl.Result, error) {

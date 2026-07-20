@@ -155,7 +155,7 @@ spec:
         app.kubernetes.io/part-of: t4-cluster
     spec:
       serviceAccountName: {{ include "t4-cluster.fullname" . }}-server
-      automountServiceAccountToken: true
+      automountServiceAccountToken: false
       terminationGracePeriodSeconds: {{ .Values.server.terminationGracePeriodSeconds }}
       securityContext:
         runAsNonRoot: true
@@ -202,6 +202,10 @@ spec:
               value: "8080"
             - name: T4_CLUSTER_ADMIN_PORT
               value: "9090"
+            - name: T4_CLUSTER_TRUSTED_PROXY_ADDRESSES
+              value: {{ join "," .Values.server.trustedProxyAddresses | quote }}
+            - name: T4_CLUSTER_TRUSTED_PROXY_CIDRS
+              value: {{ join "," .Values.server.trustedProxyCIDRs | quote }}
             - name: T4_CLUSTER_HOST_NAME
               value: {{ .Values.clusterHost.name }}
             - name: T4_CLUSTER_IDENTITY_TOKEN_FILE
@@ -273,6 +277,9 @@ spec:
             - name: cluster-identity
               mountPath: /var/run/secrets/t4-cluster-identity
               readOnly: true
+            - name: kubernetes-api-access
+              mountPath: /var/run/secrets/kubernetes.io/serviceaccount
+              readOnly: true
       volumes:
         - name: cluster-identity
           projected:
@@ -282,6 +289,19 @@ spec:
                   audience: t4-cluster-internal
                   expirationSeconds: 600
                   path: token
+        - name: kubernetes-api-access
+          projected:
+            defaultMode: 0440
+            sources:
+              - serviceAccountToken:
+                  audience: https://kubernetes.default.svc
+                  expirationSeconds: 3600
+                  path: token
+              - configMap:
+                  name: kube-root-ca.crt
+                  items:
+                    - key: ca.crt
+                      path: ca.crt
         - name: temporary
           emptyDir:
             sizeLimit: 256Mi

@@ -171,16 +171,28 @@ func TestWorkspaceDeletionWaitsForSessionResources(t *testing.T) {
 	session := testSession()
 	session.Spec.WorkspaceRef = workspace.Name
 	c := fake.NewClientBuilder().WithScheme(scheme).WithStatusSubresource(&clusterv1alpha1.T4Workspace{}).WithObjects(workspace, pvc, session).Build()
-	if err := c.Delete(context.Background(), workspace); err != nil { t.Fatal(err) }
+	if err := c.Delete(context.Background(), workspace); err != nil {
+		t.Fatal(err)
+	}
 	r := &controllers.WorkspaceReconciler{Client: c, Scheme: scheme}
-	if _, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(workspace)}); err != nil { t.Fatal(err) }
+	if _, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(workspace)}); err != nil {
+		t.Fatal(err)
+	}
 	var waiting clusterv1alpha1.T4Workspace
-	if err := c.Get(context.Background(), client.ObjectKeyFromObject(workspace), &waiting); err != nil { t.Fatalf("workspace deletion did not wait: %v", err) }
+	if err := c.Get(context.Background(), client.ObjectKeyFromObject(workspace), &waiting); err != nil {
+		t.Fatalf("workspace deletion did not wait: %v", err)
+	}
 	condition := findCondition(waiting.Status.Conditions, "Ready")
-	if condition == nil || condition.Reason != "SessionsRemain" { t.Fatalf("Ready = %#v, want SessionsRemain", condition) }
+	if condition == nil || condition.Reason != "SessionsRemain" {
+		t.Fatalf("Ready = %#v, want SessionsRemain", condition)
+	}
 	var retained corev1.PersistentVolumeClaim
-	if err := c.Get(context.Background(), client.ObjectKeyFromObject(pvc), &retained); err != nil { t.Fatalf("workspace PVC changed during wait: %v", err) }
-	if len(retained.OwnerReferences) != 1 { t.Fatalf("workspace PVC was orphaned before sessions exited: %#v", retained.OwnerReferences) }
+	if err := c.Get(context.Background(), client.ObjectKeyFromObject(pvc), &retained); err != nil {
+		t.Fatalf("workspace PVC changed during wait: %v", err)
+	}
+	if len(retained.OwnerReferences) != 1 {
+		t.Fatalf("workspace PVC was orphaned before sessions exited: %#v", retained.OwnerReferences)
+	}
 }
 
 func TestSessionWaitsForBoundRWXThenCreatesExactlyOnePodAndService(t *testing.T) {
@@ -282,8 +294,8 @@ func TestSessionRejectsUnownedDeterministicResources(t *testing.T) {
 	workspace.Status.PVCName = "workspace-a-data"
 	pvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{Name: workspace.Status.PVCName, Namespace: "team"},
-		Spec: corev1.PersistentVolumeClaimSpec{AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany}},
-		Status: corev1.PersistentVolumeClaimStatus{Phase: corev1.ClaimBound},
+		Spec:       corev1.PersistentVolumeClaimSpec{AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany}},
+		Status:     corev1.PersistentVolumeClaimStatus{Phase: corev1.ClaimBound},
 	}
 	session := testSession()
 	service := &corev1.Service{ObjectMeta: metav1.ObjectMeta{Name: controllers.SessionServiceName(session), Namespace: "team"}}
@@ -291,16 +303,24 @@ func TestSessionRejectsUnownedDeterministicResources(t *testing.T) {
 		WithStatusSubresource(&clusterv1alpha1.T4Session{}, &corev1.PersistentVolumeClaim{}).
 		WithObjects(testHost(), workspace, pvc, session, service).Build()
 	r := &controllers.SessionReconciler{Client: c, Scheme: scheme, RuntimeImage: "registry.example/session@sha256:deadbeef"}
-	if _, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(session)}); err != nil { t.Fatal(err) }
+	if _, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(session)}); err != nil {
+		t.Fatal(err)
+	}
 	var got clusterv1alpha1.T4Session
-	if err := c.Get(context.Background(), client.ObjectKeyFromObject(session), &got); err != nil { t.Fatal(err) }
+	if err := c.Get(context.Background(), client.ObjectKeyFromObject(session), &got); err != nil {
+		t.Fatal(err)
+	}
 	condition := findCondition(got.Status.Conditions, "Available")
 	if condition == nil || condition.Reason != "ServiceOwnershipConflict" || got.Status.Phase != clusterv1alpha1.InfrastructureFailed {
 		t.Fatalf("collision status = %#v/%q", condition, got.Status.Phase)
 	}
 	var pods corev1.PodList
-	if err := c.List(context.Background(), &pods, client.InNamespace("team")); err != nil { t.Fatal(err) }
-	if len(pods.Items) != 0 { t.Fatalf("collision created %d pods", len(pods.Items)) }
+	if err := c.List(context.Background(), &pods, client.InNamespace("team")); err != nil {
+		t.Fatal(err)
+	}
+	if len(pods.Items) != 0 {
+		t.Fatalf("collision created %d pods", len(pods.Items))
+	}
 }
 
 func TestSessionRecreatesPodWhenImmutableDesiredStateChanges(t *testing.T) {
@@ -309,8 +329,8 @@ func TestSessionRecreatesPodWhenImmutableDesiredStateChanges(t *testing.T) {
 	workspace.Status.PVCName = "workspace-a-data"
 	pvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{Name: workspace.Status.PVCName, Namespace: "team"},
-		Spec: corev1.PersistentVolumeClaimSpec{AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany}},
-		Status: corev1.PersistentVolumeClaimStatus{Phase: corev1.ClaimBound},
+		Spec:       corev1.PersistentVolumeClaimSpec{AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany}},
+		Status:     corev1.PersistentVolumeClaimStatus{Phase: corev1.ClaimBound},
 	}
 	session := testSession()
 	session.UID = "session-uid"
@@ -323,10 +343,14 @@ func TestSessionRecreatesPodWhenImmutableDesiredStateChanges(t *testing.T) {
 		return err
 	})
 	var original corev1.Pod
-	if err := c.Get(context.Background(), types.NamespacedName{Namespace: "team", Name: controllers.SessionPodName(session)}, &original); err != nil { t.Fatal(err) }
+	if err := c.Get(context.Background(), types.NamespacedName{Namespace: "team", Name: controllers.SessionPodName(session)}, &original); err != nil {
+		t.Fatal(err)
+	}
 	originalHash := original.Annotations[clusterv1alpha1.SessionPodSpecHashAnnotation]
 	r.RuntimeImage = "registry.example/session@sha256:new"
-	if _, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(session)}); err != nil { t.Fatal(err) }
+	if _, err := r.Reconcile(context.Background(), ctrl.Request{NamespacedName: client.ObjectKeyFromObject(session)}); err != nil {
+		t.Fatal(err)
+	}
 	var deleted corev1.Pod
 	if err := c.Get(context.Background(), types.NamespacedName{Namespace: "team", Name: controllers.SessionPodName(session)}, &deleted); !apierrors.IsNotFound(err) {
 		t.Fatalf("outdated pod remains after immutable desired state changed: %v", err)
@@ -336,7 +360,9 @@ func TestSessionRecreatesPodWhenImmutableDesiredStateChanges(t *testing.T) {
 		return err
 	})
 	var replacement corev1.Pod
-	if err := c.Get(context.Background(), types.NamespacedName{Namespace: "team", Name: controllers.SessionPodName(session)}, &replacement); err != nil { t.Fatal(err) }
+	if err := c.Get(context.Background(), types.NamespacedName{Namespace: "team", Name: controllers.SessionPodName(session)}, &replacement); err != nil {
+		t.Fatal(err)
+	}
 	if replacement.Spec.Containers[0].Image != r.RuntimeImage || replacement.Annotations[clusterv1alpha1.SessionPodSpecHashAnnotation] == originalHash {
 		t.Fatalf("replacement pod did not converge: image=%q annotations=%#v", replacement.Spec.Containers[0].Image, replacement.Annotations)
 	}

@@ -1,13 +1,17 @@
 # syntax=docker/dockerfile:1.7
+FROM docker.io/library/node:24.13.1-bookworm@sha256:00e9195ebd49985a6da8921f419978d85dfe354589755192dc090425ce4da2f7 AS dependencies
+WORKDIR /opt/t4
+COPY . /opt/t4
+RUN corepack enable \
+    && pnpm install --frozen-lockfile --ignore-scripts
+
 FROM docker.io/oven/bun:1.3.14-debian@sha256:9dba1a1b43ce28c9d7931bfc4eb00feb63b0114720a0277a8f939ae4dfc9db6f
 USER root
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates curl tini \
     && rm -rf /var/lib/apt/lists/*
 WORKDIR /opt/t4
-COPY . /opt/t4
-RUN bun install --ignore-scripts --lockfile-only \
-    && bun install --frozen-lockfile --ignore-scripts
+COPY --from=dependencies /opt/t4 /opt/t4
 ENV NODE_ENV=production \
     HOME=/tmp \
     T4_CLUSTER_SERVER_PORT=8080 \

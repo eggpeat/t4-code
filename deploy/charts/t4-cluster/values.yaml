@@ -6,7 +6,7 @@ clusterHost:
     - default
   allowedOrigins: []
   projection:
-    maxWorkspaces: 1000
+    maxWorkspaces: 256
     resyncSeconds: 60
 
 images:
@@ -38,6 +38,9 @@ controller:
 server:
   replicas: 3
   terminationGracePeriodSeconds: 60
+  # At least one trusted Tailscale proxy address or canonical CIDR is required for client access.
+  trustedProxyAddresses: []
+  trustedProxyCIDRs: []
   resources:
     requests:
       cpu: 250m

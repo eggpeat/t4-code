@@ -9,10 +9,10 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	storagev1 "k8s.io/api/storage/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	meta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
-	meta "k8s.io/apimachinery/pkg/api/meta"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -34,7 +34,9 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 		return r.reconcileDelete(ctx, &workspace)
 	}
 	if controllerutil.AddFinalizer(&workspace, clusterv1alpha1.WorkspaceFinalizer) {
-		if err := r.Update(ctx, &workspace); err != nil { return ctrl.Result{}, err }
+		if err := r.Update(ctx, &workspace); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 
 	var host clusterv1alpha1.T4ClusterHost
@@ -45,7 +47,9 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 		return ctrl.Result{}, err
 	}
 	storageClassName := workspace.Spec.StorageClassName
-	if storageClassName == "" { storageClassName = host.Spec.StorageClassName }
+	if storageClassName == "" {
+		storageClassName = host.Spec.StorageClassName
+	}
 	var storageClass storagev1.StorageClass
 	if err := r.Get(ctx, types.NamespacedName{Name: storageClassName}, &storageClass); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -67,27 +71,45 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 				Name: pvcName, Namespace: workspace.Namespace,
 				Labels: map[string]string{
 					"app.kubernetes.io/part-of": "t4-cluster",
-					"cluster.t4.dev/workspace": workspace.Name,
+					"cluster.t4.dev/workspace":  workspace.Name,
 				},
+				Annotations: map[string]string{clusterv1alpha1.WorkspaceUIDAnnotation: string(workspace.UID)},
 			},
 			Spec: corev1.PersistentVolumeClaimSpec{
-				AccessModes: []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany},
+				AccessModes:      []corev1.PersistentVolumeAccessMode{corev1.ReadWriteMany},
 				StorageClassName: &storageClassName,
-				VolumeMode: &volumeMode,
-				Resources: corev1.VolumeResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceStorage: workspace.Spec.Size.DeepCopy()}},
+				VolumeMode:       &volumeMode,
+				Resources:        corev1.VolumeResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceStorage: workspace.Spec.Size.DeepCopy()}},
 			},
 		}
-		if err := controllerutil.SetControllerReference(&workspace, &pvc, r.Scheme); err != nil { return ctrl.Result{}, err }
-		if err := r.Create(ctx, &pvc); err != nil && !apierrors.IsAlreadyExists(err) { return ctrl.Result{}, err }
+		if workspace.Spec.RetentionPolicy == clusterv1alpha1.RetentionPolicyDelete {
+			if err := controllerutil.SetControllerReference(&workspace, &pvc, r.Scheme); err != nil {
+				return ctrl.Result{}, err
+			}
+		}
+		if err := r.Create(ctx, &pvc); err != nil && !apierrors.IsAlreadyExists(err) {
+			return ctrl.Result{}, err
+		}
 	} else if err != nil {
 		return ctrl.Result{}, err
-	} else if !metav1.IsControlledBy(&pvc, &workspace) {
-		return ctrl.Result{RequeueAfter: 30 * time.Second}, r.updateWorkspaceFailure(ctx, &workspace, "StorageReady", "PVCOwnershipConflict", "deterministic workspace PVC is not controlled by this workspace")
+	} else if !workspaceOwnsPVC(&workspace, &pvc) {
+		return ctrl.Result{RequeueAfter: 30 * time.Second}, r.updateWorkspaceFailure(ctx, &workspace, "StorageReady", "PVCOwnershipConflict", "deterministic workspace PVC does not belong to this workspace")
+	} else if workspace.Spec.RetentionPolicy == clusterv1alpha1.RetentionPolicyRetain && metav1.IsControlledBy(&pvc, &workspace) {
+		before := pvc.DeepCopy()
+		pvc.OwnerReferences = removeWorkspaceOwnerReference(pvc.OwnerReferences, workspace.UID)
+		if !reflect.DeepEqual(before.OwnerReferences, pvc.OwnerReferences) {
+			if err := r.Update(ctx, &pvc); err != nil {
+				return ctrl.Result{}, err
+			}
+			return ctrl.Result{Requeue: true}, nil
+		}
 	}
 
 	original := workspace.Status
 	original.Capacity = workspace.Status.Capacity.DeepCopy()
-	if workspace.Status.Conditions != nil { original.Conditions = append([]metav1.Condition(nil), workspace.Status.Conditions...) }
+	if workspace.Status.Conditions != nil {
+		original.Conditions = append([]metav1.Condition(nil), workspace.Status.Conditions...)
+	}
 	workspace.Status.ObservedGeneration = workspace.Generation
 	workspace.Status.PVCName = pvcName
 	workspace.Status.PVCPhase = pvc.Status.Phase
@@ -111,34 +133,73 @@ func (r *WorkspaceReconciler) Reconcile(ctx context.Context, request ctrl.Reques
 		meta.SetStatusCondition(&workspace.Status.Conditions, condition("Ready", metav1.ConditionFalse, "PVCBinding", "workspace PVC is waiting to bind", workspace.Generation))
 	}
 	if !reflect.DeepEqual(original, workspace.Status) {
-		if err := r.Status().Update(ctx, &workspace); err != nil { return ctrl.Result{}, err }
+		if err := r.Status().Update(ctx, &workspace); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
-	if pvc.Status.Phase != corev1.ClaimBound { return ctrl.Result{RequeueAfter: 5 * time.Second}, nil }
+	if pvc.Status.Phase != corev1.ClaimBound {
+		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
+	}
 	return ctrl.Result{}, nil
 }
 
+func workspaceOwnsPVC(workspace *clusterv1alpha1.T4Workspace, pvc *corev1.PersistentVolumeClaim) bool {
+	if pvc.Annotations[clusterv1alpha1.WorkspaceUIDAnnotation] != string(workspace.UID) {
+		return false
+	}
+	controller := metav1.GetControllerOf(pvc)
+	if workspace.Spec.RetentionPolicy == clusterv1alpha1.RetentionPolicyDelete {
+		return controller != nil && controller.UID == workspace.UID
+	}
+	return controller == nil || controller.UID == workspace.UID
+}
+
+func removeWorkspaceOwnerReference(references []metav1.OwnerReference, uid types.UID) []metav1.OwnerReference {
+	output := references[:0]
+	for _, reference := range references {
+		if reference.UID != uid {
+			output = append(output, reference)
+		}
+	}
+	return output
+}
+
 func (r *WorkspaceReconciler) reconcileDelete(ctx context.Context, workspace *clusterv1alpha1.T4Workspace) (ctrl.Result, error) {
-	if !controllerutil.ContainsFinalizer(workspace, clusterv1alpha1.WorkspaceFinalizer) { return ctrl.Result{}, nil }
+	if !controllerutil.ContainsFinalizer(workspace, clusterv1alpha1.WorkspaceFinalizer) {
+		return ctrl.Result{}, nil
+	}
 	originalStatus := workspace.Status
-	if workspace.Status.Conditions != nil { originalStatus.Conditions = append([]metav1.Condition(nil), workspace.Status.Conditions...) }
+	if workspace.Status.Conditions != nil {
+		originalStatus.Conditions = append([]metav1.Condition(nil), workspace.Status.Conditions...)
+	}
 	workspace.Status.ObservedGeneration = workspace.Generation
 	workspace.Status.Phase = clusterv1alpha1.InfrastructureTerminating
 	meta.SetStatusCondition(&workspace.Status.Conditions, condition("Ready", metav1.ConditionFalse, "Terminating", "workspace infrastructure is terminating", workspace.Generation))
 	if !reflect.DeepEqual(originalStatus, workspace.Status) {
-		if err := r.Status().Update(ctx, workspace); err != nil { return ctrl.Result{}, err }
+		if err := r.Status().Update(ctx, workspace); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
 	var sessions clusterv1alpha1.T4SessionList
-	if err := r.List(ctx, &sessions, client.InNamespace(workspace.Namespace)); err != nil { return ctrl.Result{}, err }
+	if err := r.List(ctx, &sessions, client.InNamespace(workspace.Namespace)); err != nil {
+		return ctrl.Result{}, err
+	}
 	remainingSessions := 0
 	for i := range sessions.Items {
-		if sessions.Items[i].Spec.WorkspaceRef == workspace.Name { remainingSessions++ }
+		if sessions.Items[i].Spec.WorkspaceRef == workspace.Name {
+			remainingSessions++
+		}
 	}
 	if remainingSessions > 0 {
 		before := workspace.Status
-		if workspace.Status.Conditions != nil { before.Conditions = append([]metav1.Condition(nil), workspace.Status.Conditions...) }
+		if workspace.Status.Conditions != nil {
+			before.Conditions = append([]metav1.Condition(nil), workspace.Status.Conditions...)
+		}
 		meta.SetStatusCondition(&workspace.Status.Conditions, condition("Ready", metav1.ConditionFalse, "SessionsRemain", fmt.Sprintf("workspace deletion is waiting for %d session resources", remainingSessions), workspace.Generation))
 		if !reflect.DeepEqual(before, workspace.Status) {
-			if err := r.Status().Update(ctx, workspace); err != nil { return ctrl.Result{}, err }
+			if err := r.Status().Update(ctx, workspace); err != nil {
+				return ctrl.Result{}, err
+			}
 		}
 		return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 	}
@@ -148,23 +209,29 @@ func (r *WorkspaceReconciler) reconcileDelete(ctx context.Context, workspace *cl
 	if workspace.Spec.RetentionPolicy == clusterv1alpha1.RetentionPolicyRetain {
 		if err == nil {
 			before := pvc.DeepCopy()
-			refs := pvc.OwnerReferences[:0]
-			for _, ref := range pvc.OwnerReferences {
-				if ref.UID != workspace.UID { refs = append(refs, ref) }
+			pvc.OwnerReferences = removeWorkspaceOwnerReference(pvc.OwnerReferences, workspace.UID)
+			if pvc.Annotations == nil {
+				pvc.Annotations = map[string]string{}
 			}
-			pvc.OwnerReferences = refs
-			if pvc.Annotations == nil { pvc.Annotations = map[string]string{} }
 			pvc.Annotations[clusterv1alpha1.RetainedPVCAnnotation] = "true"
 			if !reflect.DeepEqual(before.ObjectMeta, pvc.ObjectMeta) {
-				if err := r.Update(ctx, &pvc); err != nil { return ctrl.Result{}, err }
+				if err := r.Update(ctx, &pvc); err != nil {
+					return ctrl.Result{}, err
+				}
 			}
-		} else if !apierrors.IsNotFound(err) { return ctrl.Result{}, err }
+		} else if !apierrors.IsNotFound(err) {
+			return ctrl.Result{}, err
+		}
 	} else {
 		if err == nil {
-			if err := r.Delete(ctx, &pvc); err != nil && !apierrors.IsNotFound(err) { return ctrl.Result{}, err }
+			if err := r.Delete(ctx, &pvc); err != nil && !apierrors.IsNotFound(err) {
+				return ctrl.Result{}, err
+			}
 			return ctrl.Result{RequeueAfter: time.Second}, nil
 		}
-		if !apierrors.IsNotFound(err) { return ctrl.Result{}, err }
+		if !apierrors.IsNotFound(err) {
+			return ctrl.Result{}, err
+		}
 	}
 	controllerutil.RemoveFinalizer(workspace, clusterv1alpha1.WorkspaceFinalizer)
 	return ctrl.Result{}, r.Update(ctx, workspace)
@@ -173,11 +240,15 @@ func (r *WorkspaceReconciler) reconcileDelete(ctx context.Context, workspace *cl
 func (r *WorkspaceReconciler) updateWorkspaceFailure(ctx context.Context, workspace *clusterv1alpha1.T4Workspace, conditionType, reason, message string) error {
 	original := workspace.Status
 	original.Capacity = workspace.Status.Capacity.DeepCopy()
-	if workspace.Status.Conditions != nil { original.Conditions = append([]metav1.Condition(nil), workspace.Status.Conditions...) }
+	if workspace.Status.Conditions != nil {
+		original.Conditions = append([]metav1.Condition(nil), workspace.Status.Conditions...)
+	}
 	workspace.Status.ObservedGeneration = workspace.Generation
 	workspace.Status.Phase = clusterv1alpha1.InfrastructureFailed
 	meta.SetStatusCondition(&workspace.Status.Conditions, condition(conditionType, metav1.ConditionFalse, reason, message, workspace.Generation))
-	if reflect.DeepEqual(original, workspace.Status) { return nil }
+	if reflect.DeepEqual(original, workspace.Status) {
+		return nil
+	}
 	return r.Status().Update(ctx, workspace)
 }
 

@@ -15,7 +15,7 @@
           "type": "object",
           "required": ["maxWorkspaces", "resyncSeconds"],
           "properties": {
-            "maxWorkspaces": { "type": "integer", "minimum": 1, "maximum": 10000 },
+            "maxWorkspaces": { "type": "integer", "minimum": 1, "maximum": 256 },
             "resyncSeconds": { "type": "integer", "minimum": 10, "maximum": 3600 }
           }
         }
@@ -41,10 +41,12 @@
     },
     "server": {
       "type": "object",
-      "required": ["replicas", "terminationGracePeriodSeconds", "resources"],
+      "required": ["replicas", "terminationGracePeriodSeconds", "trustedProxyAddresses", "trustedProxyCIDRs", "resources"],
       "properties": {
         "replicas": { "type": "integer", "minimum": 2, "maximum": 9 },
         "terminationGracePeriodSeconds": { "type": "integer", "minimum": 30, "maximum": 300 },
+        "trustedProxyAddresses": { "type": "array", "maxItems": 64, "uniqueItems": true, "items": { "type": "string", "anyOf": [{ "format": "ipv4" }, { "format": "ipv6" }] } },
+        "trustedProxyCIDRs": { "type": "array", "maxItems": 64, "uniqueItems": true, "items": { "type": "string", "pattern": "^[0-9A-Fa-f:.]+/(?:[0-9]|[1-9][0-9]|1[01][0-9]|12[0-8])$", "maxLength": 64 } },
         "resources": { "type": "object" }
       }
     },
@@ -84,6 +86,12 @@
       "if": { "properties": { "enabled": { "const": true } } },
       "then": {
         "properties": {
+          "server": {
+            "anyOf": [
+              { "properties": { "trustedProxyAddresses": { "minItems": 1 } } },
+              { "properties": { "trustedProxyCIDRs": { "minItems": 1 } } }
+            ]
+          },
           "storage": { "properties": { "adminRWXStorageClass": { "minLength": 1 } } },
           "images": {
             "properties": {

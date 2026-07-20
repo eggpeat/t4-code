@@ -7,10 +7,12 @@ import (
 )
 
 const (
-	WorkspaceFinalizer       = "cluster.t4.dev/workspace-protection"
-	SessionFinalizer         = "cluster.t4.dev/session-cleanup"
-	RWXStorageClassAnnotation = "cluster.t4.dev/access-modes"
-	RetainedPVCAnnotation     = "cluster.t4.dev/retained"
+	WorkspaceFinalizer           = "cluster.t4.dev/workspace-protection"
+	SessionFinalizer             = "cluster.t4.dev/session-cleanup"
+	RWXStorageClassAnnotation    = "cluster.t4.dev/access-modes"
+	RetainedPVCAnnotation        = "cluster.t4.dev/retained"
+	WorkspaceUIDAnnotation       = "cluster.t4.dev/workspace-uid"
+	SessionPodSpecHashAnnotation = "cluster.t4.dev/pod-spec-hash"
 )
 
 type RetentionPolicy string
@@ -105,11 +107,11 @@ type T4WorkspaceSpec struct {
 
 type T4WorkspaceStatus struct {
 	ObservedGeneration int64               `json:"observedGeneration,omitempty"`
-	PVCName             string              `json:"pvcName,omitempty"`
-	PVCPhase            corev1.ClaimPhase   `json:"pvcPhase,omitempty"`
-	Capacity            resource.Quantity   `json:"capacity,omitempty"`
-	Phase               InfrastructurePhase `json:"phase,omitempty"`
-	Conditions          []metav1.Condition  `json:"conditions,omitempty"`
+	PVCName            string              `json:"pvcName,omitempty"`
+	PVCPhase           corev1.ClaimPhase   `json:"pvcPhase,omitempty"`
+	Capacity           resource.Quantity   `json:"capacity,omitempty"`
+	Phase              InfrastructurePhase `json:"phase,omitempty"`
+	Conditions         []metav1.Condition  `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true
@@ -150,10 +152,10 @@ type T4SessionSpec struct {
 
 type T4SessionStatus struct {
 	ObservedGeneration int64               `json:"observedGeneration,omitempty"`
-	PodName             string              `json:"podName,omitempty"`
-	ServiceName         string              `json:"serviceName,omitempty"`
-	Phase               InfrastructurePhase `json:"phase,omitempty"`
-	Conditions          []metav1.Condition  `json:"conditions,omitempty"`
+	PodName            string              `json:"podName,omitempty"`
+	ServiceName        string              `json:"serviceName,omitempty"`
+	Phase              InfrastructurePhase `json:"phase,omitempty"`
+	Conditions         []metav1.Condition  `json:"conditions,omitempty"`
 }
 
 // +kubebuilder:object:root=true
