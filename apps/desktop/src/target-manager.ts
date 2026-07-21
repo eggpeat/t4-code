@@ -95,6 +95,7 @@ export class DesktopTargetManager {
   private readonly deviceId: string;
   private readonly deviceName: string;
   private readonly capabilities: readonly DeviceCapability[];
+  private readonly clusterOperatorEnabled: boolean;
   private readonly requestedFeatures: readonly string[];
   private readonly compatibilityRequestedFeatures: readonly string[];
   private readonly connectAttempts = new Map<string, { readonly generation: number; readonly result: Promise<"connecting" | "connected"> }>();
@@ -125,15 +126,16 @@ export class DesktopTargetManager {
     this.registry = options.registry;
     this.deviceId = options.deviceId ?? "desktop";
     this.credentials = options.credentials;
+    this.clusterOperatorEnabled = options.clusterOperatorEnabled === true;
     this.capabilities = Object.freeze([
       ...clusterOperatorRequestedCapabilities(
         options.capabilities ?? DEFAULT_CAPABILITIES,
-        options.clusterOperatorEnabled === true,
+        this.clusterOperatorEnabled,
       ),
     ]) as readonly DeviceCapability[];
     this.requestedFeatures = clusterOperatorRequestedFeatures(
       REQUESTED_FEATURES,
-      options.clusterOperatorEnabled === true,
+      this.clusterOperatorEnabled,
     );
     this.compatibilityRequestedFeatures = Object.freeze(
       this.requestedFeatures.filter(
@@ -343,7 +345,12 @@ export class DesktopTargetManager {
     if (this.closed) throw new Error("target manager is closed");
     const local = await this.localProfile(targetId);
     const remote = local === undefined ? await this.remoteTarget(targetId) : undefined;
-    const requestedCapabilities = Object.freeze([...(local !== undefined ? this.capabilities : remote!.requestedCapabilities)]);
+    const requestedCapabilities = Object.freeze([
+      ...clusterOperatorRequestedCapabilities(
+        local !== undefined ? this.capabilities : remote!.requestedCapabilities,
+        this.clusterOperatorEnabled,
+      ),
+    ]);
     const existing = this.runtimes.get(targetId);
     if (existing !== undefined && sameCapabilities(existing.requestedCapabilities, requestedCapabilities)) {
       if (existing.client.state === "ready") {
