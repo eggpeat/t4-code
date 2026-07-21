@@ -737,6 +737,10 @@ export class DesktopRuntimeController {
   }
   private handleServerEvent(event: RendererServerEventEnvelope): void {
     const incomingEvent = event.event;
+    if (
+      incomingEvent.kind === "workspace.state" &&
+      !this.clusterProjectionGrantedForTarget(event.targetId, String(incomingEvent.payload.hostId))
+    ) return;
     const transcriptEvent = this.isRetainedTranscriptEvent(incomingEvent);
     // Do not deep-clone a potentially large transcript payload before applying
     // retention. The shared projection consumes the decoded event directly;
@@ -915,10 +919,6 @@ export class DesktopRuntimeController {
     targetId: string,
     event: RendererServerEventEnvelope["event"],
   ): void {
-    if (
-      event.kind === "workspace.state" &&
-      !this.clusterProjectionGrantedForTarget(targetId, String(event.payload.hostId))
-    ) return;
     if (this.stopped) return;
     this.projection.applyPublicEvent(event);
     if (this.current.targets.has(targetId)) {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { CLUSTER_OPERATOR_FEATURE, hostId, revision, sessionId, type WelcomeFrame, type WorkspaceInfrastructureProjection } from "@t4-code/protocol";
+import { CLUSTER_OPERATOR_FEATURE, hostId, revision, sessionId, type WelcomeFrame, type WorkspaceInfrastructureProjection, type WorkspaceStateFrame } from "@t4-code/protocol";
 import { rendererServerEventFromFrame } from "@t4-code/protocol/desktop-ipc";
 import type {
   BootstrapResult,
@@ -80,6 +80,15 @@ const workspaceInfrastructure = (workspaceId = "workspace-a"): WorkspaceInfrastr
   storageClass: "rwx",
   accessMode: "ReadWriteMany",
   revision: revision("workspace-r1"),
+});
+const workspaceState = (workspaceId = "workspace-event"): WorkspaceStateFrame => ({
+  v: "omp-app/1",
+  type: "workspace.state",
+  hostId: hostId("host-a"),
+  workspaceId,
+  cursor: { epoch: "workspace-event-epoch", seq: 1 },
+  revision: revision("workspace-event-r1"),
+  upsert: { ...workspaceInfrastructure(workspaceId), revision: revision("workspace-event-r1") },
 });
 class FakeTimerScheduler {
   readonly timers = new Map<number, { readonly callback: () => void; readonly delayMs: number }>();
@@ -388,6 +397,24 @@ describe("desktop runtime projection", () => {
 
     expect(runtime.getSnapshot().projection.workspaces.size).toBe(0);
     expect(runtime.getSnapshot().projection.workspaceCursors.size).toBe(0);
+  });
+  it.each([
+    { authority: "the feature flag is off", enabled: false, capabilities: ["sessions.read"], features: [CLUSTER_OPERATOR_FEATURE], granted: false },
+    { authority: "cluster.operator was not negotiated", enabled: true, capabilities: ["sessions.read"], features: [], granted: false },
+    { authority: "the effective cluster projection grant is present", enabled: true, capabilities: ["sessions.read"], features: [CLUSTER_OPERATOR_FEATURE], granted: true },
+  ])("gates workspace.state projection and renderer delivery when $authority", async ({ enabled, capabilities, features, granted }) => {
+    const shell = new FakeShell();
+    const runtime = createDesktopRuntimeController({ shell, clusterOperatorEnabled: enabled });
+    await runtime.start();
+    shell.emitFrame({ targetId: "local", frame: welcome("host-a", capabilities, features) });
+    const deliveredKinds: string[] = [];
+    runtime.subscribeEvents((event) => deliveredKinds.push(event.event.kind));
+
+    shell.emitFrame({ targetId: "local", frame: workspaceState() });
+    shell.emitFrame({ targetId: "local", frame: { v: "omp-app/1", type: "catalog", hostId: hostId("host-a"), revision: revision("catalog-event-r1"), items: [] } });
+
+    expect(runtime.getSnapshot().projection.workspaces.has("host-a\u0000workspace-event")).toBe(granted);
+    expect(deliveredKinds).toEqual(granted ? ["workspace.state", "catalog"] : ["catalog"]);
   });
   it("purges retained workspace cache before any current host grant", async () => {
     const saves: string[] = [];
