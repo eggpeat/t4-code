@@ -719,8 +719,9 @@ describe("desktop target manager boundaries", () => {
     const registry = new Registry();
     const remote = {
       ...target("observe-pair"),
-      requestedCapabilities: ["sessions.read", "catalog.read"],
+      requestedCapabilities: ["sessions.read", "catalog.read", CI_TRIGGER_CAPABILITY],
     };
+    const effectiveCapabilities = ["sessions.read", "catalog.read"];
     await registry.put(remote);
     const credentials = {
       withCredential<T>(): T {
@@ -744,7 +745,7 @@ describe("desktop target manager boundaries", () => {
     expect(await runtime.connect("observe-pair")).toBe("connecting");
     expect(transports).toHaveLength(1);
     const hello = JSON.parse(transports[0]?.sent[0] ?? "{}") as Record<string, unknown>;
-    expect(hello).toMatchObject({ capabilities: { client: remote.requestedCapabilities } });
+    expect(hello).toMatchObject({ capabilities: { client: effectiveCapabilities } });
     const pairTransport = transports[0];
     if (pairTransport === undefined) throw new Error("pairing transport was not created");
     const pairRequestPromise = pairTransport.waitForSent(1);
@@ -752,8 +753,9 @@ describe("desktop target manager boundaries", () => {
     const pairRequest = await pairRequestPromise;
     expect(pairRequest).toMatchObject({
       type: "pair.start",
-      requestedCapabilities: remote.requestedCapabilities,
+      requestedCapabilities: effectiveCapabilities,
     });
+    expect(pairRequest).not.toMatchObject({ requestedCapabilities: remote.requestedCapabilities });
     expect(pairRequest).not.toMatchObject({ requestedCapabilities: [...DEVICE_CAPABILITIES] });
     pairTransport.receive({
       v: V,
@@ -768,6 +770,7 @@ describe("desktop target manager boundaries", () => {
       deviceToken: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
       expiresAt: "2030-01-01T00:00:00Z",
     });
+    expect(transports).toHaveLength(1);
     const result = await pairing;
     expect(result).toEqual({ targetId: "observe-pair", paired: true });
     await runtime.close();

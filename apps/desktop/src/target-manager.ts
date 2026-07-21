@@ -127,12 +127,9 @@ export class DesktopTargetManager {
     this.deviceId = options.deviceId ?? "desktop";
     this.credentials = options.credentials;
     this.clusterOperatorEnabled = options.clusterOperatorEnabled === true;
-    this.capabilities = Object.freeze([
-      ...clusterOperatorRequestedCapabilities(
-        options.capabilities ?? DEFAULT_CAPABILITIES,
-        this.clusterOperatorEnabled,
-      ),
-    ]) as readonly DeviceCapability[];
+    this.capabilities = this.effectiveCapabilities(
+      options.capabilities ?? DEFAULT_CAPABILITIES,
+    ) as readonly DeviceCapability[];
     this.requestedFeatures = clusterOperatorRequestedFeatures(
       REQUESTED_FEATURES,
       this.clusterOperatorEnabled,
@@ -204,8 +201,12 @@ export class DesktopTargetManager {
     return enqueueTarget(this.targetQueues, targetId, async () => {
       if (localProfileId(targetId) === undefined) {
         const remote = await this.remoteTarget(targetId);
+        const effectiveCapabilities = this.effectiveCapabilities(remote.requestedCapabilities);
         const current = this.runtimes.get(targetId);
-        if (current !== undefined && !sameCapabilities(current.requestedCapabilities, remote.requestedCapabilities)) {
+        if (
+          current !== undefined &&
+          !sameCapabilities(current.requestedCapabilities, effectiveCapabilities)
+        ) {
           await this.closeRuntime(targetId);
           const attempt = await this.connectNow(targetId);
           await attempt.result;
@@ -335,6 +336,12 @@ export class DesktopTargetManager {
     this.targetQueues.clear();
   }
 
+  private effectiveCapabilities(capabilities: readonly string[]): readonly string[] {
+    return Object.freeze([
+      ...clusterOperatorRequestedCapabilities(capabilities, this.clusterOperatorEnabled),
+    ]);
+  }
+
   private async remoteTarget(targetId: string): Promise<RemoteTargetRecord> {
     if (this.registry === undefined) throw new Error("target not found");
     const target = await this.registry.get(targetId);
@@ -345,12 +352,9 @@ export class DesktopTargetManager {
     if (this.closed) throw new Error("target manager is closed");
     const local = await this.localProfile(targetId);
     const remote = local === undefined ? await this.remoteTarget(targetId) : undefined;
-    const requestedCapabilities = Object.freeze([
-      ...clusterOperatorRequestedCapabilities(
-        local !== undefined ? this.capabilities : remote!.requestedCapabilities,
-        this.clusterOperatorEnabled,
-      ),
-    ]);
+    const requestedCapabilities = this.effectiveCapabilities(
+      local !== undefined ? this.capabilities : remote!.requestedCapabilities,
+    );
     const existing = this.runtimes.get(targetId);
     if (existing !== undefined && sameCapabilities(existing.requestedCapabilities, requestedCapabilities)) {
       if (existing.client.state === "ready") {
