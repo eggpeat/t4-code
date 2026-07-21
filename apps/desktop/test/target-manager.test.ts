@@ -765,8 +765,8 @@ describe("desktop target manager boundaries", () => {
       deviceId: "desktop",
       deviceName: "T4 Code Desktop",
       platform: process.platform,
-      requestedCapabilities: remote.requestedCapabilities,
-      grantedCapabilities: remote.requestedCapabilities,
+      requestedCapabilities: effectiveCapabilities,
+      grantedCapabilities: effectiveCapabilities,
       deviceToken: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
       expiresAt: "2030-01-01T00:00:00Z",
     });
