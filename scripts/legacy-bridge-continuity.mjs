@@ -961,6 +961,7 @@ export async function runLegacyBridgeContinuity(argv = []) {
       "reconnected T4 client recovered no transcript rows",
     );
 
+    const restartMark = t4Primary.mark();
     const beforeRestartEpoch = t4Primary.client.snapshot().epoch;
     await stopProcess(primaryProcess, "primary appserver before restart");
     running.delete("continuity-a");
@@ -986,6 +987,16 @@ export async function runLegacyBridgeContinuity(argv = []) {
       "second T4 reconnect after appserver restart",
       RECONNECT_TIMEOUT_MS,
     );
+    const postRestartSnapshotEvent = await t4Primary.event(
+      "snapshot",
+      (payload) => payload.sessionId === target.sessionId,
+      restartMark,
+      RECONNECT_TIMEOUT_MS,
+    );
+    const postRestartSnapshot = {
+      label: "post-restart transcript snapshot",
+      ...postRestartSnapshotEvent.payload,
+    };
     const persistedStatus = await adminRequest(restarted, "POST", "/admin/test/status", {
       runId: profiles[0].runId,
     });
@@ -1069,11 +1080,6 @@ export async function runLegacyBridgeContinuity(argv = []) {
     });
     assert.equal(secondRename.ok, true, "fresh revision did not recover control");
 
-    const postRestartSnapshot = await attachSnapshot(
-      t4Primary,
-      target.sessionId,
-      "post-restart transcript snapshot",
-    );
     const searchResponse = await t4Primary.client.command({
       hostId: t4Primary.hostId(),
       command: "transcript.search",
