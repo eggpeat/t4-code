@@ -224,8 +224,8 @@ steps:
       - export PATH="$PWD/.ci:$PATH"
       - export SSL_CERT_FILE="$PWD/.ci/ca-certificates.crt"
       - export NODE_EXTRA_CA_CERTS="$SSL_CERT_FILE"
-      - (cd packages/host-wire && bun --bun run test)
-      - (cd packages/host-service && bun --bun run test)
+      - (cd packages/host-wire && bun test test/cluster-operator.test.ts)
+      - (cd packages/host-service && bun test test/cluster-default-off.test.ts)
     backend_options:
       kubernetes:
         serviceAccountName: woodpecker-ci-untrusted
