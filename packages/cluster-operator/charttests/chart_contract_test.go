@@ -357,7 +357,7 @@ func TestUnauthenticatedOMPControllerCannotReadSecrets(t *testing.T) {
 
 func TestChartUsesOnlyProjectedServiceAccountIdentityForInternalPeers(t *testing.T) {
 	output := helmTemplate(t, enabledValues()...)
-	assertCount(t, output, "kind: ServiceAccount", 3)
+	assertKindCount(t, output, "ServiceAccount", 3)
 	assertCount(t, output, "kind: Secret", 0)
 	server := documentContainingKind(t, output, "Deployment", "name: \"release-name-t4-cluster-server\"")
 	assertContains(t, server,
@@ -555,6 +555,7 @@ func TestImageContractsArePinnedAndAuthorityCompatible(t *testing.T) {
 	controller := mustRead(t, filepath.Join(root, "cluster", "images", "controller", "Dockerfile"))
 	server := mustRead(t, filepath.Join(root, "cluster", "images", "cluster-server", "Dockerfile"))
 	session := mustRead(t, filepath.Join(root, "cluster", "images", "session-runtime", "Dockerfile"))
+	entrypoint := mustRead(t, filepath.Join(root, "cluster", "images", "session-runtime", "session-entrypoint.sh"))
 	for name, content := range map[string]string{"controller": controller, "server": server, "session": session} {
 		if !strings.Contains(content, "@sha256:") {
 			t.Fatalf("%s image uses an unpinned base", name)
@@ -564,10 +565,11 @@ func TestImageContractsArePinnedAndAuthorityCompatible(t *testing.T) {
 		"8476f4451ed95c5d5401785d279a93d3c659fac4",
 		"t4code-17.0.5-appserver-10",
 		"t4-omp-authority/1",
-		"packages/cluster-server/src/session-host-main.ts",
+		"session-entrypoint.sh",
 		"chromium",
 		"Xvfb",
 	)
+	assertContains(t, entrypoint, "packages/cluster-server/src/session-host-main.ts")
 	for name, content := range map[string]string{"server": server, "session": session} {
 		assertContains(t, content, "pnpm install --frozen-lockfile")
 		if strings.Contains(content, "bun install --ignore-scripts --lockfile-only") {
@@ -588,7 +590,6 @@ func TestImageContractsArePinnedAndAuthorityCompatible(t *testing.T) {
 		t.Fatal("controller image hardcodes or claims a single/unbuilt architecture")
 	}
 	assertContains(t, server, "packages/cluster-server/src/main.ts")
-	entrypoint := mustRead(t, filepath.Join(root, "cluster", "images", "session-runtime", "session-entrypoint.sh"))
 	assertContains(t, entrypoint,
 		"T4_CLUSTER_SERVER_SERVICE_ACCOUNT",
 		"/var/run/secrets/kubernetes.io/serviceaccount/token",
@@ -762,6 +763,20 @@ func assertCount(t *testing.T, value, needle string, want int) {
 	t.Helper()
 	if got := strings.Count(value, needle); got != want {
 		t.Fatalf("count(%q) = %d, want %d", needle, got, want)
+	}
+}
+
+func assertKindCount(t *testing.T, rendered, kind string, want int) {
+	t.Helper()
+	needle := "kind: " + kind
+	got := 0
+	for _, line := range strings.Split(rendered, "\n") {
+		if line == needle {
+			got++
+		}
+	}
+	if got != want {
+		t.Fatalf("kind %q count = %d, want %d", kind, got, want)
 	}
 }
 
