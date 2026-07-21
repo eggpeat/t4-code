@@ -126,8 +126,9 @@ func TestRetainDeletionOrphansPVCBeforeRemovingFinalizer(t *testing.T) {
 	workspace.Finalizers = []string{clusterv1alpha1.WorkspaceFinalizer}
 	pvc := &corev1.PersistentVolumeClaim{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      controllers.WorkspacePVCName(workspace),
-			Namespace: workspace.Namespace,
+			Name:        controllers.WorkspacePVCName(workspace),
+			Namespace:   workspace.Namespace,
+			Annotations: map[string]string{clusterv1alpha1.WorkspaceUIDAnnotation: string(workspace.UID)},
 			OwnerReferences: []metav1.OwnerReference{{
 				APIVersion: clusterv1alpha1.GroupVersion.String(), Kind: "T4Workspace", Name: workspace.Name, UID: workspace.UID, Controller: ptr(true),
 			}},

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 import { createHash } from "node:crypto";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { WoodpeckerProvider, mapWoodpeckerPipeline } from "../src/woodpecker.ts";
@@ -139,7 +139,8 @@ describe("bounded Woodpecker provider", () => {
 				seen.push(new Headers(init?.headers).get("authorization") ?? "");
 				return Response.json([]);
 			}) as typeof globalThis.fetch;
-			await writeFile(tokenFile, "a".repeat(40), { mode: 0o400 });
+			await writeFile(`${tokenFile}.next`, "a".repeat(40), { mode: 0o400 });
+			await rename(`${tokenFile}.next`, tokenFile);
 			const woodpecker = new WoodpeckerProvider({
 				baseUrl: "https://ci.example.test",
 				tokenFile,
@@ -147,7 +148,8 @@ describe("bounded Woodpecker provider", () => {
 				fetch,
 			});
 			await woodpecker.query(correlation);
-			await writeFile(tokenFile, "b".repeat(40), { mode: 0o400 });
+			await writeFile(`${tokenFile}.next`, "b".repeat(40), { mode: 0o400 });
+			await rename(`${tokenFile}.next`, tokenFile);
 			await woodpecker.query(correlation);
 			expect(seen).toEqual([`Bearer ${"a".repeat(40)}`, `Bearer ${"b".repeat(40)}`]);
 		} finally {

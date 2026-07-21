@@ -226,10 +226,14 @@ class FakeShell implements DesktopShellPort {
     // eslint-disable-next-line unicorn/no-useless-spread -- preserve listener snapshot when callbacks may unsubscribe during dispatch.
     for (const listener of [...this.serverEvents]) listener(envelope);
   }
-  // eslint-disable-next-line unicorn/no-useless-spread -- preserve listener snapshot when callbacks may unsubscribe during dispatch.
-  emitState(event: ConnectionStateEvent): void { for (const listener of [...this.states]) listener(event); }
-  // eslint-disable-next-line unicorn/no-useless-spread -- preserve listener snapshot when callbacks may unsubscribe during dispatch.
-  emitWake(): void { for (const listener of [...this.wakes]) listener(); }
+  emitState(event: ConnectionStateEvent): void {
+    // eslint-disable-next-line unicorn/no-useless-spread -- preserve listener snapshot when callbacks may unsubscribe during dispatch.
+    for (const listener of [...this.states]) listener(event);
+  }
+  emitWake(): void {
+    // eslint-disable-next-line unicorn/no-useless-spread -- preserve listener snapshot when callbacks may unsubscribe during dispatch.
+    for (const listener of [...this.wakes]) listener();
+  }
   async confirm(request: ConfirmRequest): Promise<ConfirmResult> { return { targetId: request.targetId, requestId: "confirm-request", confirmationId: request.confirmationId, commandId: request.commandId, accepted: true }; }
   async terminalInput(request: TerminalInputRequest): Promise<TerminalResult> { return { targetId: request.targetId, accepted: true }; }
   async terminalResize(request: TerminalResizeRequest): Promise<TerminalResult> { return { targetId: request.targetId, accepted: true }; }
@@ -239,8 +243,10 @@ class FakeShell implements DesktopShellPort {
     if (this.stopSpeakingGate !== undefined) await this.stopSpeakingGate;
     return { accepted: true };
   }
-  // eslint-disable-next-line unicorn/no-useless-spread -- preserve listener snapshot when callbacks may unsubscribe during dispatch.
-  emitError(event: RuntimeErrorEvent): void { for (const listener of [...this.errors]) listener(event); }
+  emitError(event: RuntimeErrorEvent): void {
+    // eslint-disable-next-line unicorn/no-useless-spread -- preserve listener snapshot when callbacks may unsubscribe during dispatch.
+    for (const listener of [...this.errors]) listener(event);
+  }
 }
 
 const leaseIntent = (args: Record<string, unknown> = {}): CommandRequest["intent"] => ({
@@ -440,6 +446,7 @@ describe("desktop runtime projection", () => {
     });
     expect(runtime.getSnapshot().projection.workspaces.size).toBe(0);
     expect(runtime.getSnapshot().projection.workspaceCursors.size).toBe(0);
+  });
   it("preserves operation capabilities from catalog responses and live catalog frames", async () => {
     const shell = new FakeShell();
     shell.catalogResult = {

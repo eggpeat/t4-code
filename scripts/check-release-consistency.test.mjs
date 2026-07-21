@@ -250,7 +250,7 @@ test("rejects updater channel, stable manifest, and publication-contract drift",
       ".github/workflows/ci.yml",
       (text) =>
         text.replace(
-          "needs: [changes, core, legacy-bridge-continuity, tooling, android-debug, flutter, flutter-android, flutter-apple]",
+          "needs: [changes, core, legacy-bridge-continuity, cluster, tooling, android-debug, flutter, flutter-android, flutter-apple]",
           "needs: [changes, core, tooling, android-debug]",
         ),
     ],
@@ -529,6 +529,11 @@ test("deploys release site source only after artifact publication", () => {
   assert.ok(ciWorkflow.includes("path: artifacts/legacy-bridge-continuity/"));
   assert.ok(ciWorkflow.includes("if-no-files-found: error"));
   assert.ok(ciWorkflow.includes("tooling:"));
+  assert.ok(ciWorkflow.includes("cluster:"));
+  assert.ok(ciWorkflow.includes("actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16"));
+  assert.ok(ciWorkflow.includes("run: pnpm test:cluster:ci"));
+  assert.ok(ciWorkflow.includes("run: go test ./..."));
+  assert.ok(ciWorkflow.includes("run: helm lint deploy/charts/t4-cluster"));
   assert.ok(ciWorkflow.includes("flutter:"));
   assert.ok(ciWorkflow.includes("flutter-android:"));
   assert.ok(ciWorkflow.includes("flutter-apple:"));
@@ -550,7 +555,7 @@ test("deploys release site source only after artifact publication", () => {
   assert.ok(ciWorkflow.includes("if: ${{ always() }}"));
   assert.ok(
     ciWorkflow.includes(
-      "needs: [changes, core, legacy-bridge-continuity, tooling, android-debug, flutter, flutter-android, flutter-apple]",
+      "needs: [changes, core, legacy-bridge-continuity, cluster, tooling, android-debug, flutter, flutter-android, flutter-apple]",
     ),
   );
   assert.ok(ciWorkflow.includes('test "$CHANGES_RESULT" = success'));

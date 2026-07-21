@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vite-plus/test";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rename, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { clusterServerConfigFromEnv, readClusterIdentityToken } from "../src/config.ts";
@@ -34,10 +34,13 @@ describe("cluster server configuration", () => {
 		const directory = await mkdtemp(join(tmpdir(), "t4-cluster-identity-"));
 		try {
 			const path = join(directory, "token");
+			const nextPath = `${path}.next`;
 			const token = `header.payload.${"s".repeat(64)}`;
-			await writeFile(path, token, { mode: 0o400 });
+			await writeFile(nextPath, token, { mode: 0o400 });
+			await rename(nextPath, path);
 			expect(await readClusterIdentityToken(path)).toBe(token);
-			await writeFile(path, "x".repeat(16_385), { mode: 0o400 });
+			await writeFile(nextPath, "x".repeat(16_385), { mode: 0o400 });
+			await rename(nextPath, path);
 			await expect(readClusterIdentityToken(path)).rejects.toThrow("invalid");
 			await expect(readClusterIdentityToken(directory)).rejects.toThrow("invalid");
 		} finally {
