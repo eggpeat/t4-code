@@ -7,6 +7,7 @@ import {
   type PublicOmpServerEvent,
 } from "@t4-code/client";
 import {
+  CI_TRIGGER_CAPABILITY,
   commandId,
   confirmationId,
   CLUSTER_OPERATOR_FEATURE,
@@ -252,6 +253,40 @@ describe("desktop target manager boundaries", () => {
     };
     expect(enabledHello.requestedFeatures).toContain(CLUSTER_OPERATOR_FEATURE);
     await enabledRuntime.close();
+
+    const registry = new Registry();
+    await registry.put({
+      ...target("cluster"),
+      requestedCapabilities: [...DEVICE_CAPABILITIES],
+    });
+    const disabledRemoteTransport = new Transport();
+    const disabledRemoteRuntime = new DesktopTargetManager({
+      cursorStore: new Store(),
+      registry,
+      remoteTransportFactory: () => disabledRemoteTransport as never,
+      events: { onEvent: () => {}, onState: () => {}, onError: () => {} },
+    });
+    await disabledRemoteRuntime.connect("cluster");
+    const disabledRemoteHello = JSON.parse(disabledRemoteTransport.sent[0] ?? "{}") as {
+      readonly capabilities?: { readonly client?: readonly string[] };
+    };
+    expect(disabledRemoteHello.capabilities?.client).not.toContain(CI_TRIGGER_CAPABILITY);
+    await disabledRemoteRuntime.close();
+
+    const enabledRemoteTransport = new Transport();
+    const enabledRemoteRuntime = new DesktopTargetManager({
+      cursorStore: new Store(),
+      registry,
+      clusterOperatorEnabled: true,
+      remoteTransportFactory: () => enabledRemoteTransport as never,
+      events: { onEvent: () => {}, onState: () => {}, onError: () => {} },
+    });
+    await enabledRemoteRuntime.connect("cluster");
+    const enabledRemoteHello = JSON.parse(enabledRemoteTransport.sent[0] ?? "{}") as {
+      readonly capabilities?: { readonly client?: readonly string[] };
+    };
+    expect(enabledRemoteHello.capabilities?.client).toContain(CI_TRIGGER_CAPABILITY);
+    await enabledRemoteRuntime.close();
   });
   it("lists and connects named local profiles through profile-scoped transports", async () => {
     const transports: Transport[] = [];
