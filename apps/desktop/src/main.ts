@@ -126,7 +126,7 @@ export function bootstrapDesktopMain(options: MainRuntimeOptions): Promise<void>
 }
 
 const lifecycle = new DesktopLifecycle({
-  ...(desktopClusterOperatorEnabled() ? { clusterOperatorEnabled: true } : {}),
+  clusterOperatorEnabled: desktopClusterOperatorEnabled(),
 });
 void bootstrapDesktopMain({
   app: app as unknown as DesktopApp,
